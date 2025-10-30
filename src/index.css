@@ -1,65 +1,142 @@
-body {
-  margin: 0;
-  background: linear-gradient(180deg, rgb(117, 81, 194), rgb(255, 255, 255));
-  display: flex;
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  height: 100vh;
-  width: 100vw;
-  justify-content: center;
-  align-items: center;
+@import "tailwindcss";
+
+@theme {
+  --color-background: oklch(100% 0 0);
+  --color-foreground: oklch(9.8% 0.011 285.88);
+  --color-card: oklch(100% 0 0);
+  --color-card-foreground: oklch(9.8% 0.011 285.88);
+  --color-popover: oklch(100% 0 0);
+  --color-popover-foreground: oklch(9.8% 0.011 285.88);
+  --color-primary: oklch(55.55% 0.15 264.52);
+  --color-primary-foreground: oklch(98% 0.002 285.88);
+  --color-secondary: oklch(96.08% 0.002 285.88);
+  --color-secondary-foreground: oklch(11.18% 0.011 285.88);
+  --color-muted: oklch(96.08% 0.002 285.88);
+  --color-muted-foreground: oklch(44.71% 0.01 285.88);
+  --color-accent: oklch(96.08% 0.002 285.88);
+  --color-accent-foreground: oklch(11.18% 0.011 285.88);
+  --color-destructive: oklch(64.8% 0.177 25.34);
+  --color-destructive-foreground: oklch(98% 0.002 285.88);
+  --color-border: oklch(89.41% 0.006 285.88);
+  --color-input: oklch(89.41% 0.006 285.88);
+  --color-ring: oklch(55.55% 0.15 264.52);
+  --radius: 0.5rem;
 }
 
-main {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
+@theme dark {
+  --color-background: oklch(9.8% 0.011 285.88);
+  --color-foreground: oklch(98% 0.002 285.88);
+  --color-card: oklch(9.8% 0.011 285.88);
+  --color-card-foreground: oklch(98% 0.002 285.88);
+  --color-popover: oklch(9.8% 0.011 285.88);
+  --color-popover-foreground: oklch(98% 0.002 285.88);
+  --color-primary: oklch(70.18% 0.15 264.52);
+  --color-primary-foreground: oklch(11.18% 0.011 285.88);
+  --color-secondary: oklch(14.51% 0.011 285.88);
+  --color-secondary-foreground: oklch(98% 0.002 285.88);
+  --color-muted: oklch(14.51% 0.011 285.88);
+  --color-muted-foreground: oklch(63.53% 0.01 285.88);
+  --color-accent: oklch(14.51% 0.011 285.88);
+  --color-accent-foreground: oklch(98% 0.002 285.88);
+  --color-destructive: oklch(57.72% 0.177 25.34);
+  --color-destructive-foreground: oklch(98% 0.002 285.88);
+  --color-border: oklch(14.51% 0.011 285.88);
+  --color-input: oklch(14.51% 0.011 285.88);
+  --color-ring: oklch(70.18% 0.15 264.52);
 }
 
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-  color: white;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
+@layer base {
+  * {
+    @apply border-border;
+  }
 
-ul {
-  padding-inline-start: 0;
-  margin-block-start: 0;
-  margin-block-end: 0;
-  list-style-type: none;
-  display: flex;
-  flex-direction: column;
-  margin: 8px 0;
-  border: 1px solid black;
-  gap: 1px;
-  background-color: black;
-  border-radius: 8px;
-  overflow: auto;
-}
+  html {
+    transition: background-color 0.3s, color 0.3s;
+  }
 
-li {
-  background-color: white;
-  padding: 8px;
-}
+  body {
+    @apply bg-background text-foreground;
+    font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+      sans-serif;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 
-li:hover {
-  background: #dadbf9;
-}
+  /* Ensure light theme variables apply when .light class is present (higher specificity) */
+  html.light,
+  :root.light {
+    color-scheme: light !important;
+    --color-background: oklch(100% 0 0) !important;
+    --color-foreground: oklch(9.8% 0.011 285.88) !important;
+    --color-card: oklch(100% 0 0) !important;
+    --color-card-foreground: oklch(9.8% 0.011 285.88) !important;
+    --color-popover: oklch(100% 0 0) !important;
+    --color-popover-foreground: oklch(9.8% 0.011 285.88) !important;
+    --color-primary: oklch(55.55% 0.15 264.52) !important;
+    --color-primary-foreground: oklch(98% 0.002 285.88) !important;
+    --color-secondary: oklch(96.08% 0.002 285.88) !important;
+    --color-secondary-foreground: oklch(11.18% 0.011 285.88) !important;
+    --color-muted: oklch(96.08% 0.002 285.88) !important;
+    --color-muted-foreground: oklch(44.71% 0.01 285.88) !important;
+    --color-accent: oklch(96.08% 0.002 285.88) !important;
+    --color-accent-foreground: oklch(11.18% 0.011 285.88) !important;
+    --color-destructive: oklch(64.8% 0.177 25.34) !important;
+    --color-destructive-foreground: oklch(98% 0.002 285.88) !important;
+    --color-border: oklch(89.41% 0.006 285.88) !important;
+    --color-input: oklch(89.41% 0.006 285.88) !important;
+    --color-ring: oklch(55.55% 0.15 264.52) !important;
+  }
 
-a {
-  font-weight: 800;
-  text-decoration: none;
+  /* Ensure dark theme variables apply when .dark class is present */
+  html.dark,
+  :root.dark {
+    color-scheme: dark;
+    --color-background: oklch(9.8% 0.011 285.88);
+    --color-foreground: oklch(98% 0.002 285.88);
+    --color-card: oklch(9.8% 0.011 285.88);
+    --color-card-foreground: oklch(98% 0.002 285.88);
+    --color-popover: oklch(9.8% 0.011 285.88);
+    --color-popover-foreground: oklch(98% 0.002 285.88);
+    --color-primary: oklch(70.18% 0.15 264.52);
+    --color-primary-foreground: oklch(11.18% 0.011 285.88);
+    --color-secondary: oklch(14.51% 0.011 285.88);
+    --color-secondary-foreground: oklch(98% 0.002 285.88);
+    --color-muted: oklch(14.51% 0.011 285.88);
+    --color-muted-foreground: oklch(63.53% 0.01 285.88);
+    --color-accent: oklch(14.51% 0.011 285.88);
+    --color-accent-foreground: oklch(98% 0.002 285.88);
+    --color-destructive: oklch(57.72% 0.177 25.34);
+    --color-destructive-foreground: oklch(98% 0.002 285.88);
+    --color-border: oklch(14.51% 0.011 285.88);
+    --color-input: oklch(14.51% 0.011 285.88);
+    --color-ring: oklch(70.18% 0.15 264.52);
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/20 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/30;
+  }
+
+  /* Thin scrollbar on mobile */
+  @media (max-width: 768px) {
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+  }
 }
