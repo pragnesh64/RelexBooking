@@ -20,7 +20,7 @@ export function ProtectedRoute({
   requireAdmin,
   requireSuperAdmin,
 }: ProtectedRouteProps) {
-  const { user, loading, isAuthenticated, hasRole } = useAuth();
+  const { loading, isAuthenticated, hasRole } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -65,4 +65,3 @@ export function ProtectedRoute({
 
   return <>{children}</>;
 }
-

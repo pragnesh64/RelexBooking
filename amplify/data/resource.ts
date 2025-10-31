@@ -29,11 +29,11 @@ const schema = a.schema({
     })
     .authorization((allow) => [
       // Public can read published events
-      allow.public().to(["read"]),
+      allow.publicApiKey().to(["read"]),
       // Authenticated users can read
       allow.authenticated().to(["read"]),
       // Organizers can create/update/delete their own events
-      allow.owner("organizerID").identityClaim("sub").to(["create", "update", "delete"]),
+      allow.ownerDefinedIn("organizerID").identityClaim("sub").to(["create", "update", "delete"]),
       // Admins and SuperAdmins can manage all events
       allow.group("Admin").to(["create", "read", "update", "delete"]),
       allow.group("SuperAdmin").to(["create", "read", "update", "delete"]),
@@ -59,7 +59,7 @@ const schema = a.schema({
     })
     .authorization((allow) => [
       // Users can create and manage their own bookings
-      allow.owner("userID").identityClaim("sub").to(["create", "read", "update"]),
+      allow.ownerDefinedIn("userID").identityClaim("sub").to(["create", "read", "update"]),
       // Organizers can read bookings for their events (via Event relationship)
       allow.authenticated().to(["read"]),
       // Admins and SuperAdmins can manage all bookings
@@ -84,7 +84,7 @@ const schema = a.schema({
     })
     .authorization((allow) => [
       // Users can read/update their own profile
-      allow.owner("userID").identityClaim("sub").to(["create", "read", "update"]),
+      allow.ownerDefinedIn("userID").identityClaim("sub").to(["create", "read", "update"]),
       // Admins can read all profiles
       allow.group("Admin").to(["read", "update"]),
       allow.group("SuperAdmin").to(["read", "update", "delete"]),
