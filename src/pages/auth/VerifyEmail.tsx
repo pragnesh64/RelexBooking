@@ -10,7 +10,11 @@ export function VerifyEmail() {
   const navigate = useNavigate();
   const location = useLocation();
   const { confirmSignUp, resendSignUpCode } = useAuth();
-  const email = (location.state as any)?.email || '';
+  type VerifyLocationState = { email?: string };
+  const email =
+    typeof location.state === "object" && location.state !== null && "email" in location.state
+      ? ((location.state as VerifyLocationState).email ?? "")
+      : "";
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
@@ -28,8 +32,9 @@ export function VerifyEmail() {
       setTimeout(() => {
         navigate('/signin', { state: { message: 'Email verified! Please sign in.' } });
       }, 2000);
-    } catch (err: any) {
-      setError(err.message || 'Invalid verification code');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Invalid verification code';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -42,8 +47,9 @@ export function VerifyEmail() {
     try {
       await resendSignUpCode(email);
       setError('');
-    } catch (err: any) {
-      setError(err.message || 'Failed to resend code');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to resend code';
+      setError(message);
     } finally {
       setResending(false);
     }
@@ -143,4 +149,3 @@ export function VerifyEmail() {
     </div>
   );
 }
-

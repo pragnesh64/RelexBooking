@@ -15,7 +15,11 @@ export function SignIn() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const from = (location.state as any)?.from?.pathname || '/';
+  type LocationState = { from?: { pathname?: string } };
+  const from =
+    typeof location.state === "object" && location.state !== null && "from" in location.state
+      ? ((location.state as LocationState).from?.pathname ?? "/")
+      : "/";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,8 +29,9 @@ export function SignIn() {
     try {
       await signIn(email, password);
       navigate(from, { replace: true });
-    } catch (err: any) {
-      setError(err.message || 'Failed to sign in');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to sign in";
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -113,4 +118,3 @@ export function SignIn() {
     </div>
   );
 }
-

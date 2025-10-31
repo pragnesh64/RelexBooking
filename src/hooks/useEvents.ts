@@ -1,39 +1,102 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { getAmplifyClient } from "@/lib/amplifyClient";
-import type { Event, CreateEventInput, UpdateEventInput } from "@/types/graphql";
+import type {
+  AmplifyEventModel,
+  Event,
+  CreateEventInput,
+  UpdateEventInput,
+} from "@/types/graphql";
+
+const eventSelection = [
+  "id",
+  "title",
+  "description",
+  "date",
+  "location",
+  "price",
+  "capacity",
+  "imageUrl",
+  "category",
+  "organizerID",
+  "organizerName",
+  "status",
+  "publishedAt",
+  "createdAt",
+  "updatedAt",
+] as const;
+
+type EventSelectionModel = Pick<
+  AmplifyEventModel,
+  | "id"
+  | "title"
+  | "description"
+  | "date"
+  | "location"
+  | "price"
+  | "capacity"
+  | "imageUrl"
+  | "category"
+  | "organizerID"
+  | "organizerName"
+  | "status"
+  | "publishedAt"
+  | "createdAt"
+  | "updatedAt"
+> & { bookings?: unknown };
+
+function mapEventFromModel(model: EventSelectionModel): Event {
+  return {
+    id: model.id,
+    title: model.title ?? null,
+    description: model.description ?? null,
+    date: model.date ?? null,
+    location: model.location ?? null,
+    price: model.price ?? null,
+    capacity: model.capacity ?? null,
+    imageUrl: model.imageUrl ?? null,
+    category: model.category ?? null,
+    organizerID: model.organizerID,
+    organizerName: model.organizerName ?? null,
+    status: model.status ?? null,
+    publishedAt: model.publishedAt ?? null,
+    createdAt: model.createdAt ?? null,
+    updatedAt: model.updatedAt ?? null,
+  };
+}
 
 export function useEvents() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  useEffect(() => {
-    const fetchEvents = async () => {
-      try {
-        const client = getAmplifyClient();
-        if (!client) {
-          setError(new Error("Amplify client not configured"));
-          setLoading(false);
-          return;
-        }
+  const fetchEvents = useCallback(async () => {
+    setLoading(true);
+    setError(null);
 
-        // TODO: Replace with actual GraphQL query
-        // const result = await client.models.Event.list();
-        // setEvents(result.data);
-        
-        // Mock data for now
-        setEvents([]);
-        setLoading(false);
-      } catch (err) {
-        setError(err as Error);
-        setLoading(false);
+    try {
+      const client = getAmplifyClient();
+      if (!client) {
+        throw new Error("Amplify client not configured");
       }
-    };
 
-    fetchEvents();
+      const result = await client.models.Event.list({
+        selectionSet: eventSelection,
+      });
+      setEvents(result.data.map((item) => mapEventFromModel(item)));
+    } catch (err) {
+      const eventError = err instanceof Error ? err : new Error("Failed to load events");
+      setError(eventError);
+      setEvents([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  return { events, loading, error };
+  useEffect(() => {
+    void fetchEvents();
+  }, [fetchEvents]);
+
+  return { events, loading, error, refetch: fetchEvents };
 }
 
 export function useEvent(id: string) {
@@ -43,6 +106,9 @@ export function useEvent(id: string) {
 
   useEffect(() => {
     const fetchEvent = async () => {
+      setLoading(true);
+      setError(null);
+
       try {
         const client = getAmplifyClient();
         if (!client) {
@@ -51,20 +117,20 @@ export function useEvent(id: string) {
           return;
         }
 
-        // TODO: Replace with actual GraphQL query
-        // const result = await client.models.Event.get({ id });
-        // setEvent(result.data);
-        
-        setEvent(null);
+        const result = await client.models.Event.get(
+          { id },
+          { selectionSet: eventSelection },
+        );
+        setEvent(result.data ? mapEventFromModel(result.data) : null);
         setLoading(false);
       } catch (err) {
-        setError(err as Error);
+        setError(err instanceof Error ? err : new Error("Failed to load event"));
         setLoading(false);
       }
     };
 
     if (id) {
-      fetchEvent();
+      void fetchEvent();
     }
   }, [id]);
 
@@ -75,7 +141,7 @@ export function useCreateEvent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const createEvent = async (_input: CreateEventInput) => {
+  const createEvent = async (input: CreateEventInput) => {
     setLoading(true);
     setError(null);
     
@@ -85,14 +151,14 @@ export function useCreateEvent() {
         throw new Error("Amplify client not configured");
       }
 
-      // TODO: Replace with actual GraphQL mutation
-      // const result = await client.models.Event.create(input);
-      // return result.data;
-      
-      return null as any;
+      const result = await client.models.Event.create(input, {
+        selectionSet: eventSelection,
+      });
+      return result.data ? mapEventFromModel(result.data) : null;
     } catch (err) {
-      setError(err as Error);
-      throw err;
+      const eventError = err instanceof Error ? err : new Error("Failed to create event");
+      setError(eventError);
+      throw eventError;
     } finally {
       setLoading(false);
     }
@@ -105,7 +171,7 @@ export function useUpdateEvent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const updateEvent = async (_input: UpdateEventInput) => {
+  const updateEvent = async (input: UpdateEventInput) => {
     setLoading(true);
     setError(null);
     
@@ -115,14 +181,14 @@ export function useUpdateEvent() {
         throw new Error("Amplify client not configured");
       }
 
-      // TODO: Replace with actual GraphQL mutation
-      // const result = await client.models.Event.update(input);
-      // return result.data;
-      
-      return null;
+      const result = await client.models.Event.update(input, {
+        selectionSet: eventSelection,
+      });
+      return result.data ? mapEventFromModel(result.data) : null;
     } catch (err) {
-      setError(err as Error);
-      throw err;
+      const eventError = err instanceof Error ? err : new Error("Failed to update event");
+      setError(eventError);
+      throw eventError;
     } finally {
       setLoading(false);
     }
@@ -135,7 +201,7 @@ export function useDeleteEvent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const deleteEvent = async (_id: string) => {
+  const deleteEvent = async (id: string) => {
     setLoading(true);
     setError(null);
     
@@ -145,12 +211,11 @@ export function useDeleteEvent() {
         throw new Error("Amplify client not configured");
       }
 
-      // TODO: Replace with actual GraphQL mutation
-      // await client.models.Event.delete({ id });
-      
+      await client.models.Event.delete({ id });
     } catch (err) {
-      setError(err as Error);
-      throw err;
+      const eventError = err instanceof Error ? err : new Error("Failed to delete event");
+      setError(eventError);
+      throw eventError;
     } finally {
       setLoading(false);
     }

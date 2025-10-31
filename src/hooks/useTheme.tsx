@@ -98,6 +98,8 @@ export function ThemeProvider({
   );
 }
 
+// The hook depends on the provider defined above; suppress the fast-refresh rule for this export.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useTheme() {
   const context = useContext(ThemeContext);
   if (!context) {

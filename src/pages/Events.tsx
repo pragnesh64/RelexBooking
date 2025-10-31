@@ -18,20 +18,27 @@ export function Events() {
 
   // Filter events based on search, tab, and price
   const filteredEvents = events.filter((event) => {
-    const matchesSearch = event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (event.description || "").toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesTab = activeTab === "upcoming" 
-      ? new Date(event.date) > new Date()
-      : activeTab === "past"
-      ? new Date(event.date) <= new Date()
-      : true; // all
-    
-    const matchesPrice = priceFilter === "all" 
-      ? true 
-      : priceFilter === "free" 
-      ? event.price === 0 
-      : event.price > 0;
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    const matchesSearch =
+      (event.title ?? "").toLowerCase().includes(normalizedQuery) ||
+      (event.description ?? "").toLowerCase().includes(normalizedQuery);
+
+    const now = new Date();
+    const eventDate = event.date ? new Date(event.date) : null;
+    const matchesTab =
+      activeTab === "upcoming"
+        ? !!eventDate && eventDate > now
+        : activeTab === "past"
+          ? !!eventDate && eventDate <= now
+          : true;
+
+    const price = event.price ?? null;
+    const matchesPrice =
+      priceFilter === "all"
+        ? true
+        : priceFilter === "free"
+          ? price === 0
+          : price !== null && price > 0;
 
     return matchesSearch && matchesTab && matchesPrice;
   });
@@ -169,7 +176,11 @@ export function Events() {
                   variant={event.price === 0 ? "success" : "default"}
                   className="absolute top-3 right-3"
                 >
-                  {event.price === 0 ? "Free" : `$${event.price}`}
+                  {event.price === 0
+                    ? "Free"
+                    : typeof event.price === "number" && event.price > 0
+                      ? `$${event.price}`
+                      : "Paid"}
                 </Badge>
                 <button
                   onClick={(e) => {
@@ -186,7 +197,7 @@ export function Events() {
               
               <CardHeader className="pb-3">
                 <CardTitle className="line-clamp-2 text-base group-hover:text-primary transition-colors">
-                  {event.title}
+                  {event.title ?? "Untitled Event"}
                 </CardTitle>
                 <CardDescription className="line-clamp-2 text-xs mt-1">
                   {event.description || "No description available"}

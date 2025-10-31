@@ -1,12 +1,12 @@
 import { Navigate, useLocation } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth, type UserRole } from '@/hooks/useAuth';
 import { Loader2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
   requireAuth?: boolean;
-  requireRoles?: string[];
+  requireRoles?: UserRole[];
   requireOrganizer?: boolean;
   requireAdmin?: boolean;
   requireSuperAdmin?: boolean;
@@ -45,17 +45,17 @@ export function ProtectedRoute({
 
   // Check role requirements
   if (requireRoles && requireRoles.length > 0) {
-    const hasRequiredRole = requireRoles.some(role => hasRole(role as any));
+    const hasRequiredRole = requireRoles.some((role) => hasRole(role));
     if (!hasRequiredRole) {
       return <Navigate to="/unauthorized" replace />;
     }
   }
 
-  if (requireOrganizer && !hasRole(['Organizer', 'Admin', 'SuperAdmin'])) {
+  if (requireOrganizer && !hasRole(['Organizer', 'Admin', 'SuperAdmin'] as const)) {
     return <Navigate to="/unauthorized" replace />;
   }
 
-  if (requireAdmin && !hasRole(['Admin', 'SuperAdmin'])) {
+  if (requireAdmin && !hasRole(['Admin', 'SuperAdmin'] as const)) {
     return <Navigate to="/unauthorized" replace />;
   }
 

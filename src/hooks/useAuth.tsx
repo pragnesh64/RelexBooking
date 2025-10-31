@@ -35,7 +35,7 @@ interface AuthContextType {
   resendSignUpCode: (email: string) => Promise<void>;
   refreshUser: () => Promise<void>;
   updateUserAttributes: (attributes: { name?: string; phoneNumber?: string }) => Promise<void>;
-  hasRole: (role: UserRole | UserRole[]) => boolean;
+  hasRole: (role: UserRole | ReadonlyArray<UserRole>) => boolean;
   isOrganizer: boolean;
   isAdmin: boolean;
   isSuperAdmin: boolean;
@@ -129,7 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await loadUser(); // Refresh user data
   };
 
-  const hasRole = (role: UserRole | UserRole[]): boolean => {
+  const hasRole = (role: UserRole | ReadonlyArray<UserRole>): boolean => {
     if (!user) return false;
     const roles = Array.isArray(role) ? role : [role];
     return roles.some(r => user.groups.includes(r));
@@ -163,6 +163,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+// The hook lives alongside the provider so we disable the fast-refresh rule for this export.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {

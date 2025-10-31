@@ -7,12 +7,33 @@ type AmplifyClient = ReturnType<typeof generateClient<Schema>>;
 let client: AmplifyClient | null = null;
 let clientError: Error | null = null;
 
+function hasGraphQLConfiguration(config: unknown): boolean {
+  if (typeof config !== "object" || config === null) {
+    return false;
+  }
+
+  const configRecord = config as Record<string, unknown>;
+  const api = configRecord.API;
+
+  const hasGraphQlApi =
+    typeof api === "object" &&
+    api !== null &&
+    "GraphQL" in api &&
+    (api as Record<string, unknown>).GraphQL !== undefined;
+
+  const hasDataConfiguration =
+    "data" in configRecord &&
+    (configRecord as { data?: unknown }).data !== undefined;
+
+  return hasGraphQlApi || hasDataConfiguration;
+}
+
 function isAmplifyConfigured(): boolean {
   try {
     const config = Amplify.getConfig();
     // Check if GraphQL API configuration exists in Amplify v6 format
     // The config should have a data property with GraphQL API configuration
-    return !!(config?.API?.GraphQL || (config as any)?.data);
+    return hasGraphQLConfiguration(config);
   } catch {
     return false;
   }
@@ -56,8 +77,3 @@ export function getAmplifyClient(): AmplifyClient | null {
 export function getAmplifyClientError() {
   return clientError;
 }
-
-// Export types from schema
-export type Event = Schema["Event"]["type"];
-export type Booking = Schema["Booking"]["type"];
-export type UserProfile = Schema["UserProfile"]["type"];

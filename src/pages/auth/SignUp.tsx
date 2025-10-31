@@ -42,8 +42,9 @@ export function SignUp() {
       setTimeout(() => {
         navigate('/verify-email', { state: { email } });
       }, 2000);
-    } catch (err: any) {
-      setError(err.message || 'Failed to sign up');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to sign up';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -190,4 +191,3 @@ export function SignUp() {
     </div>
   );
 }
-

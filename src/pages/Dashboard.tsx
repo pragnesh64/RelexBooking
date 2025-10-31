@@ -23,26 +23,35 @@ export function Dashboard() {
   
   // Calculate stats
   const totalBookings = bookings.length;
-  const confirmedBookings = bookings.filter(b => b.status === "confirmed").length;
-  const upcomingEvents = events.filter(e => new Date(e.date) > new Date()).length;
+  const confirmedBookings = bookings.filter((b) => b.status === "confirmed").length;
+  const upcomingEvents = events.filter((e) => e.date && new Date(e.date) > new Date()).length;
   const recentBookings = bookings.slice(0, 5);
   
   // Get upcoming bookings with countdown
   const upcomingBookings = bookings
-    .filter(b => b.status === "confirmed" && b.event?.date && new Date(b.event.date) > new Date())
+    .filter(
+      (b) => b.status === "confirmed" && b.event?.date && new Date(b.event.date) > new Date(),
+    )
     .slice(0, 3);
   
   // Get recommended events (upcoming events, exclude already booked)
-  const bookedEventIds = bookings.map(b => b.event?.id).filter(Boolean);
+  const bookedEventIds = bookings
+    .map((b) => b.event?.id)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
   const recommendedEvents = events
-    .filter(e => new Date(e.date) > new Date() && !bookedEventIds.includes(e.id))
+    .filter(
+      (e) =>
+        !!e.date &&
+        new Date(e.date) > new Date() &&
+        !bookedEventIds.includes(e.id),
+    )
     .slice(0, 3);
   
   // Countdown timer component
   const CountdownTimer = ({ date }: { date: string }) => {
     const [timeLeft, setTimeLeft] = useState<string>("");
 
-  useEffect(() => {
+    useEffect(() => {
       const updateTimer = () => {
         const now = new Date().getTime();
         const eventDate = new Date(date).getTime();
@@ -50,8 +59,8 @@ export function Dashboard() {
         
         if (distance < 0) {
           setTimeLeft("Event started");
-      return;
-    }
+          return;
+        }
 
         const days = Math.floor(distance / (1000 * 60 * 60 * 24));
         const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
