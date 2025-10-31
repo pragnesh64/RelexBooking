@@ -9,7 +9,14 @@ const backend = defineBackend({
   postConfirmation,
 });
 
-// Attach Post Confirmation trigger to auth
-backend.auth.resources.userPool.addTrigger('PostConfirmation', backend.postConfirmation);
+// Attach Post Confirmation trigger using CDK
+backend.postConfirmation.resources.lambda.addPermission('CognitoInvoke', {
+  principal: 'cognito-idp.amazonaws.com',
+  sourceArn: backend.auth.resources.userPool.userPoolArn,
+});
+
+backend.auth.resources.cfnUserPool.lambdaConfig = {
+  postConfirmation: backend.postConfirmation.resources.lambda.functionArn,
+};
 
 export default backend;

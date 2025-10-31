@@ -3,7 +3,7 @@ import { defineAuth } from '@aws-amplify/backend';
 /**
  * Define and configure your auth resource with Cognito Groups support
  * @see https://docs.amplify.aws/gen2/build-a-backend/auth
- * 
+ *
  * Groups will be created in AWS Console:
  * - User (default for new signups)
  * - Organizer (can create/manage events)
@@ -19,7 +19,7 @@ export const auth = defineAuth({
       required: true,
       mutable: true,
     },
-    name: {
+    givenName: {
       required: true,
       mutable: true,
     },
@@ -29,5 +29,5 @@ export const auth = defineAuth({
     },
   },
   // Enable account recovery
-  accountRecovery: ['email'],
+  accountRecovery: 'EMAIL_ONLY',
 });
