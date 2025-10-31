@@ -15,20 +15,6 @@ export const auth = defineAuth({
   loginWith: {
     email: true,
   },
-  userAttributes: {
-    email: {
-      required: true,
-      mutable: true,
-    },
-    givenName: {
-      required: true,
-      mutable: true,
-    },
-    phoneNumber: {
-      required: false,
-      mutable: true,
-    },
-  },
   // Enable account recovery
   accountRecovery: 'EMAIL_ONLY',
   // Post-confirmation trigger to add users to groups
