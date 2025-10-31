@@ -1,4 +1,5 @@
 import { defineAuth } from '@aws-amplify/backend';
+import { postConfirmation } from '../functions/post-confirmation/resource';
 
 /**
  * Define and configure your auth resource with Cognito Groups support
@@ -30,4 +31,12 @@ export const auth = defineAuth({
   },
   // Enable account recovery
   accountRecovery: 'EMAIL_ONLY',
+  // Post-confirmation trigger to add users to groups
+  triggers: {
+    postConfirmation,
+  },
+  // Grant permissions to the function
+  access: (allow) => [
+    allow.resource(postConfirmation).to(['addUserToGroup']),
+  ],
 });
