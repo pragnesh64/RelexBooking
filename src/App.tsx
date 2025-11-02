@@ -13,6 +13,8 @@ import { Organizer } from "./pages/Organizer";
 import { Tickets } from "./pages/Tickets";
 import { Notifications } from "./pages/Notifications";
 import { Payment } from "./pages/Payment";
+import { ScanTicket } from "./pages/ScanTicket";
+import { Admin } from "./pages/Admin";
 import { SignIn } from "./pages/auth/SignIn";
 import { SignUp } from "./pages/auth/SignUp";
 import { VerifyEmail } from "./pages/auth/VerifyEmail";
@@ -72,7 +74,25 @@ function App() {
                 </ProtectedRoute>
               }
             />
-            
+            <Route
+              path="scan-ticket"
+              element={
+                <ProtectedRoute requireOrganizer>
+                  <ScanTicket />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Admin Routes - Protected */}
+            <Route
+              path="admin"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <Admin />
+                </ProtectedRoute>
+              }
+            />
+
             <Route path="profile" element={<Profile />} />
             <Route path="settings" element={<Settings />} />
             <Route path="notifications" element={<Notifications />} />

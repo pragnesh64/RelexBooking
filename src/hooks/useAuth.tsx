@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       // Get user attributes
       const email = attributes.email || currentUser.signInDetails?.loginId;
-      const name = attributes.name || '';
+      const name = attributes.preferred_username || attributes.email?.split('@')[0] || '';
       const phoneNumber = attributes.phone_number || '';
       
       setUser({
@@ -94,7 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       options: {
         userAttributes: {
           email,
-          name,
+          preferred_username: name, // Store name as preferred_username
         },
       },
     });
@@ -116,15 +116,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const handleUpdateUserAttributes = async (attributes: { name?: string; phoneNumber?: string }) => {
     const updates: Promise<unknown>[] = [];
-    
+
     if (attributes.name !== undefined) {
-      updates.push(updateUserAttribute({ userAttribute: { attributeKey: 'name', value: attributes.name } }));
+      updates.push(updateUserAttribute({ userAttribute: { attributeKey: 'preferred_username', value: attributes.name } }));
     }
-    
+
     if (attributes.phoneNumber !== undefined) {
       updates.push(updateUserAttribute({ userAttribute: { attributeKey: 'phone_number', value: attributes.phoneNumber } }));
     }
-    
+
     await Promise.all(updates);
     await loadUser(); // Refresh user data
   };

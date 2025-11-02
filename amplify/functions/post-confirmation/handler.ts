@@ -3,36 +3,47 @@ import { CognitoIdentityProviderClient, AdminAddUserToGroupCommand } from '@aws-
 
 const cognitoClient = new CognitoIdentityProviderClient({});
 
+// SuperAdmin email - automatically gets SuperAdmin role
+const SUPERADMIN_EMAIL = 'prajapatipragnesh6464@gmail.com';
+
 /**
  * Post Confirmation Lambda Trigger
- * 
+ *
  * This function runs after a user confirms their email/signs up.
- * It automatically assigns new users to the "Pending" group,
- * which requires admin approval before they can use the app.
- * 
- * Alternative: Assign to "User" group directly for immediate access
+ * It automatically assigns users to appropriate Cognito groups:
+ * - SuperAdmin: prajapatipragnesh6464@gmail.com
+ * - User: All other users (default)
  */
 export const handler: PostConfirmationTriggerHandler = async (event) => {
   console.log('Post Confirmation Trigger Event:', JSON.stringify(event, null, 2));
 
   const userPoolId = event.userPoolId;
   const username = event.userName;
-  const defaultGroup = process.env.DEFAULT_GROUP || 'Pending'; // Can be "User" for immediate access
+  const userEmail = event.request.userAttributes.email?.toLowerCase();
+
+  // Determine which group to assign
+  let groupName = 'User'; // Default group
+
+  // Check if this is the SuperAdmin email
+  if (userEmail === SUPERADMIN_EMAIL.toLowerCase()) {
+    groupName = 'SuperAdmin';
+    console.log(`🔐 SuperAdmin detected: ${userEmail}`);
+  }
 
   try {
-    // Add user to default group
+    // Add user to appropriate group
     const command = new AdminAddUserToGroupCommand({
       UserPoolId: userPoolId,
       Username: username,
-      GroupName: defaultGroup,
+      GroupName: groupName,
     });
 
     await cognitoClient.send(command);
-    console.log(`Successfully added user ${username} to group ${defaultGroup}`);
+    console.log(`✅ Successfully added user ${username} (${userEmail}) to group ${groupName}`);
 
     return event;
   } catch (error) {
-    console.error('Error adding user to group:', error);
+    console.error('❌ Error adding user to group:', error);
     // Don't fail signup if group assignment fails - log and continue
     return event;
   }

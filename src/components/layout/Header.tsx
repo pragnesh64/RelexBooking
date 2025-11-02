@@ -8,12 +8,11 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 
 type HeaderProps = {
-  title: string;
   onMenuToggle?: () => void;
   isMobileMenuOpen?: boolean;
 };
 
-export function Header({ title, onMenuToggle, isMobileMenuOpen }: HeaderProps) {
+export function Header({ onMenuToggle, isMobileMenuOpen }: HeaderProps) {
   const navigate = useNavigate();
   const { user, signOut, isOrganizer, isAdmin } = useAuth();
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
@@ -65,14 +64,14 @@ export function Header({ title, onMenuToggle, isMobileMenuOpen }: HeaderProps) {
         )}
 
         {/* Logo - hidden on mobile when sidebar is visible */}
-        <div className="hidden md:flex items-center gap-2">
+        {/* <div className="hidden md:flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <span className="text-sm font-bold">RB</span>
           </div>
           <span className="text-base font-semibold text-foreground">
             {title}
           </span>
-        </div>
+        </div> */}
       </div>
 
       {/* Search bar */}

@@ -7,6 +7,8 @@ import {
   User,
   Bell,
   Sparkles,
+  ScanLine,
+  Shield,
 } from "lucide-react";
 
 type NavigationItem = {
@@ -21,6 +23,8 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Bookings: BookOpen,
   Tickets: Ticket,
   Organizer: Sparkles,
+  "Scan Ticket": ScanLine,
+  Admin: Shield,
   Profile: User,
   Settings: Settings,
   Notifications: Bell,
