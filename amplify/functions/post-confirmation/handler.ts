@@ -14,7 +14,7 @@ const SUPERADMIN_EMAIL = 'prajapatipragnesh6464@gmail.com';
  * - SuperAdmin: prajapatipragnesh6464@gmail.com
  * - User: All other users (default)
  *
- * Note: Groups are created by CDK in backend.ts
+ * Note: Groups are created by auth/resource.ts configuration
  */
 export const handler: PostConfirmationTriggerHandler = async (event) => {
   console.log('Post Confirmation Trigger Event:', JSON.stringify(event, null, 2));

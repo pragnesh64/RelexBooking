@@ -5,7 +5,7 @@ import { postConfirmation } from '../functions/post-confirmation/resource';
  * Define and configure your auth resource with Cognito Groups support
  * @see https://docs.amplify.aws/gen2/build-a-backend/auth
  *
- * Groups will be created dynamically by the post-confirmation Lambda:
+ * Groups:
  * - User (default for new signups)
  * - Organizer (can create/manage events)
  * - Admin (can moderate events, manage users)
@@ -17,6 +17,8 @@ export const auth = defineAuth({
   },
   // Enable account recovery
   accountRecovery: 'EMAIL_ONLY',
+  // Define Cognito User Pool Groups
+  groups: ["User", "Organizer", "Admin", "SuperAdmin"],
   // Post-confirmation trigger to add users to groups
   triggers: {
     postConfirmation,

@@ -8,11 +8,13 @@ import { defineFunction } from '@aws-amplify/backend';
  * - User: All other users (default)
  *
  * The function checks the user's email and assigns the appropriate group.
+ *
+ * Assigned to 'auth' stack to avoid circular dependencies.
  */
 export const postConfirmation = defineFunction({
   name: 'postConfirmation',
   entry: './handler.ts',
   timeoutSeconds: 30,
   memoryMB: 512,
-  resourceGroupName: 'auth', // Assign to auth stack to avoid circular dependency
+  resourceGroupName: 'auth',
 });
