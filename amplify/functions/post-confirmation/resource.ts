@@ -14,4 +14,5 @@ export const postConfirmation = defineFunction({
   entry: './handler.ts',
   timeoutSeconds: 30,
   memoryMB: 512,
+  resourceGroupName: 'auth', // Assign to auth stack to avoid circular dependency
 });
