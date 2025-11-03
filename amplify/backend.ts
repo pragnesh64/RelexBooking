@@ -1,6 +1,6 @@
 import { defineBackend } from '@aws-amplify/backend';
 import { PolicyStatement, Effect, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
-import { CfnUserPool } from 'aws-cdk-lib/aws-cognito';
+import { CfnUserPool, CfnUserPoolGroup } from 'aws-cdk-lib/aws-cognito';
 import { auth } from './auth/resource';
 import { data } from './data/resource';
 import { storage } from './storage/resource';
@@ -48,5 +48,33 @@ backend.postConfirmation.resources.lambda.addToRolePolicy(
     resources: [backend.auth.resources.userPool.userPoolArn],
   })
 );
+
+// Create Cognito User Pool Groups manually using CDK
+// This avoids circular dependency while making groups available for data schema auth rules
+const userPoolId = backend.auth.resources.userPool.userPoolId;
+
+new CfnUserPoolGroup(backend.auth.resources.userPool, 'UserGroup', {
+  userPoolId: userPoolId,
+  groupName: 'User',
+  description: 'Default users - can browse and book events',
+});
+
+new CfnUserPoolGroup(backend.auth.resources.userPool, 'OrganizerGroup', {
+  userPoolId: userPoolId,
+  groupName: 'Organizer',
+  description: 'Event organizers - can create and manage events',
+});
+
+new CfnUserPoolGroup(backend.auth.resources.userPool, 'AdminGroup', {
+  userPoolId: userPoolId,
+  groupName: 'Admin',
+  description: 'Administrators - can manage users and approve KYC',
+});
+
+new CfnUserPoolGroup(backend.auth.resources.userPool, 'SuperAdminGroup', {
+  userPoolId: userPoolId,
+  groupName: 'SuperAdmin',
+  description: 'Super administrators - full system access',
+});
 
 export default backend;
