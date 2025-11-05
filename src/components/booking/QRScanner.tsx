@@ -351,8 +351,12 @@ export function QRScanner() {
 
           <div
             id={scannerDivId}
-            className={`rounded-lg overflow-hidden bg-black ${isScanning ? 'block' : 'hidden'}`}
-            style={{ minHeight: '300px', width: '100%' }}
+            className={`rounded-lg overflow-hidden ${isScanning ? 'block' : 'hidden'}`}
+            style={{
+              minHeight: '400px',
+              width: '100%',
+              position: 'relative'
+            }}
           />
 
           {isScanning && (

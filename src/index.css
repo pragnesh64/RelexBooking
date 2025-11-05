@@ -183,3 +183,40 @@
     }
   }
 }
+
+/* QR Scanner video styles */
+#qr-reader {
+  border: none !important;
+}
+
+#qr-reader video {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  object-fit: cover !important;
+  border-radius: 0.5rem;
+}
+
+#qr-reader canvas {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+}
+
+/* Ensure html5-qrcode elements are visible */
+#qr-reader__dashboard,
+#qr-reader__camera_selection,
+#qr-reader__scan_region {
+  display: block !important;
+  width: 100% !important;
+}
+
+#qr-reader__scan_region {
+  position: relative !important;
+}
+
+#qr-reader__scan_region video {
+  min-height: 300px !important;
+}

@@ -34,7 +34,7 @@ export default defineConfig({
     },
   },
   server: {
-    https: httpsConfig,
+    // https: httpsConfig, // Disabled for easier development
     host: true, // Listen on all addresses including network
   },
 })
