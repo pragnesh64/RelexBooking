@@ -18,6 +18,7 @@ export function QRScanner() {
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
+  const scanningLockRef = useRef(false);
   const scannerDivId = 'qr-reader';
 
   const checkCameraPermission = async (): Promise<'granted' | 'denied' | 'prompt'> => {
@@ -31,6 +32,54 @@ export function QRScanner() {
       }
     }
     return 'prompt';
+  };
+
+  const chooseCameraAndStart = async () => {
+    try {
+      // Get available cameras
+      const cameras = await Html5Qrcode.getCameras();
+      console.log('Available cameras:', cameras);
+
+      let cameraId: string | { facingMode: string };
+
+      if (cameras && cameras.length > 0) {
+        // Try to find back/rear/environment camera
+        const backCamera = cameras.find(cam =>
+          /back|rear|environment/i.test(cam.label)
+        );
+
+        if (backCamera) {
+          console.log('Using back camera:', backCamera.label);
+          cameraId = backCamera.id;
+        } else {
+          console.log('Using first available camera:', cameras[0].label);
+          cameraId = cameras[0].id;
+        }
+      } else {
+        // Fallback to facingMode constraint
+        console.log('No cameras enumerated, using facingMode constraint');
+        cameraId = { facingMode: 'environment' };
+      }
+
+      // Start scanning with chosen camera
+      await html5QrCodeRef.current!.start(
+        cameraId,
+        {
+          fps: 20,
+          qrbox: { width: 300, height: 300 },
+          aspectRatio: 1.777778,
+          disableFlip: false,
+        },
+        onScanSuccess,
+        onScanError
+      );
+
+      setIsScanning(true);
+      console.log('Scanner started successfully');
+    } catch (err: any) {
+      console.error('Failed to start scanner:', err);
+      throw err;
+    }
   };
 
   const startScanning = async () => {
@@ -129,73 +178,39 @@ export function QRScanner() {
       console.log('Initializing new Html5Qrcode instance...');
       html5QrCodeRef.current = new Html5Qrcode(scannerDivId);
 
-      // Start scanning with rear camera preference
-      console.log('Starting QR code scanner with rear camera...');
+      // Start scanning with best available camera
+      console.log('Starting QR code scanner...');
 
       try {
-        // Try with rear camera first (use string format, not object with 'ideal')
-        await html5QrCodeRef.current.start(
-          { facingMode: 'environment' }, // Correct format for html5-qrcode
-          {
-            fps: 20, // Increased for faster detection
-            qrbox: { width: 300, height: 300 }, // Larger scan box
-            aspectRatio: 1.777778, // 16:9 aspect ratio
-            disableFlip: false, // Allow flipped QR codes
-          },
-          onScanSuccess,
-          onScanError
-        );
-
-        setIsScanning(true);
-        console.log('Scanner started successfully with rear camera');
+        await chooseCameraAndStart();
       } catch (scannerErr: any) {
-        console.error('Failed to start with rear camera');
         console.error('Scanner initialization error:', scannerErr);
-        console.error('Error type:', typeof scannerErr);
-        console.error('Error name:', scannerErr?.name);
-        console.error('Error message:', scannerErr?.message);
-        console.error('Error string:', String(scannerErr));
 
-        // Try with front camera as fallback
+        // Show detailed error
+        let errorMsg = '';
+        if (scannerErr.name === 'NotAllowedError') {
+          errorMsg = 'Camera permission was denied. Please reload the page and click "Allow" when prompted.';
+        } else if (scannerErr.message?.includes('permission') || scannerErr.message?.includes('Permission')) {
+          errorMsg = 'Camera permission is required. Please enable camera access in your browser settings and try again.';
+        } else if (scannerErr.name === 'NotFoundError' || scannerErr.name === 'DevicesNotFoundError') {
+          errorMsg = 'No camera found. Please ensure your device has a working camera.';
+        } else if (scannerErr.message) {
+          errorMsg = `Scanner error: ${scannerErr.message}`;
+        } else {
+          errorMsg = `Failed to start scanner: ${String(scannerErr)}`;
+        }
+
+        setCameraError(errorMsg);
+        console.error('Final error message:', errorMsg);
+
+        // Clean up failed instance
         try {
-          console.log('Trying front camera as fallback...');
-
-          // Need to clear the failed scanner first
-          await html5QrCodeRef.current.clear();
-
-          await html5QrCodeRef.current.start(
-            { facingMode: 'user' }, // Front camera
-            {
-              fps: 20, // Increased for faster detection
-              qrbox: { width: 300, height: 300 }, // Larger scan box
-              aspectRatio: 1.777778, // 16:9 aspect ratio
-              disableFlip: false, // Allow flipped QR codes
-            },
-            onScanSuccess,
-            onScanError
-          );
-
-          setIsScanning(true);
-          console.log('Scanner started successfully with front camera');
-        } catch (frontCameraErr: any) {
-          console.error('Failed to start with front camera:', frontCameraErr);
-
-          // Both cameras failed, show detailed error
-          let errorMsg = '';
-          if (scannerErr.name === 'NotAllowedError' || frontCameraErr.name === 'NotAllowedError') {
-            errorMsg = 'Camera permission was denied. Please reload the page and click "Allow" when prompted.';
-          } else if (scannerErr.message?.includes('permission') || scannerErr.message?.includes('Permission')) {
-            errorMsg = 'Camera permission is required. Please enable camera access in your browser settings and try again.';
-          } else if (scannerErr.message) {
-            errorMsg = `Scanner error: ${scannerErr.message}`;
-          } else if (typeof scannerErr === 'string') {
-            errorMsg = `Scanner error: ${scannerErr}`;
-          } else {
-            errorMsg = `Failed to start scanner: ${String(scannerErr)}`;
+          if (html5QrCodeRef.current) {
+            await html5QrCodeRef.current.clear();
+            html5QrCodeRef.current = null;
           }
-
-          setCameraError(errorMsg);
-          console.error('Final error message:', errorMsg);
+        } catch (clearErr) {
+          console.warn('Error clearing failed scanner:', clearErr);
         }
       }
     } catch (err: any) {
@@ -207,95 +222,147 @@ export function QRScanner() {
   };
 
   const stopScanning = async () => {
-    if (html5QrCodeRef.current && isScanning) {
-      try {
-        await html5QrCodeRef.current.stop();
-        setIsScanning(false);
-      } catch (err) {
-        console.error('Failed to stop scanner:', err);
-      }
+    if (!html5QrCodeRef.current) {
+      setIsScanning(false);
+      scanningLockRef.current = false;
+      return;
     }
+    try {
+      // Stop camera feed (if running)
+      await html5QrCodeRef.current.stop();
+    } catch (err) {
+      console.warn('stop() error (can be ignored if not started):', err);
+    }
+    try {
+      // Clear any internal resources & UI
+      await html5QrCodeRef.current.clear();
+    } catch (err) {
+      console.warn('clear() error (can be ignored):', err);
+    }
+    html5QrCodeRef.current = null;
+    setIsScanning(false);
+    scanningLockRef.current = false;
   };
 
-  const onScanSuccess = async (decodedText: string) => {
-    console.log('QR Code detected!', decodedText);
+  const onScanSuccess = async (decodedTextOrResult: any, _maybeResult?: any) => {
+    // Handle both signature formats: (string) or (decodedResult, ...)
+    const decodedText = typeof decodedTextOrResult === 'string'
+      ? decodedTextOrResult
+      : (decodedTextOrResult?.decodedText || decodedTextOrResult?.text || '');
 
-    // Stop scanning immediately to prevent multiple scans
-    await stopScanning();
-
-    // Show processing message
-    setScanResult({
-      type: 'warning',
-      message: 'Processing QR code...',
-    });
-
-    // Parse QR code
-    const parsed = parseBookingQRCode(decodedText);
-    if (!parsed) {
-      setScanResult({
-        type: 'error',
-        message: 'Invalid QR code format',
-      });
+    if (!decodedText) {
+      console.warn('Empty QR code result');
       return;
     }
 
-    console.log('QR Code parsed successfully:', parsed);
+    // Prevent double-processing with lock
+    if (scanningLockRef.current) {
+      console.log('Scan ignored, already processing');
+      return;
+    }
+    scanningLockRef.current = true;
 
-    // Fetch booking from database
+    console.log('QR Code detected!', decodedText);
+
     try {
-      const client = getAmplifyClient();
-      if (!client) {
-        throw new Error('Amplify client not configured');
-      }
+      // Stop scanning immediately to prevent multiple scans
+      await stopScanning();
 
-      const result = await client.models.Booking.get({ id: parsed.bookingId });
-
-      if (!result.data) {
-        setScanResult({
-          type: 'error',
-          message: 'Booking not found',
-        });
-        return;
-      }
-
-      const booking = result.data as unknown as Booking;
-
-      // Validate booking
-      const validation = validateBookingQRCode(decodedText, {
-        id: booking.id,
-        eventID: booking.eventID,
-        userID: booking.userID,
-        status: booking.status,
-        checkedIn: booking.checkedIn ?? null,
-      });
-
-      if (!validation.valid) {
-        setScanResult({
-          type: 'error',
-          message: validation.reason || 'Invalid ticket',
-        });
-        return;
-      }
-
-      // Mark as checked in
-      await client.models.Booking.update({
-        id: booking.id,
-        checkedIn: true,
-        checkedInAt: new Date().toISOString(),
-      });
-
+      // Show processing message
       setScanResult({
-        type: 'success',
-        message: `Successfully checked in ${booking.userName || 'guest'}`,
-        booking,
+        type: 'warning',
+        message: 'Processing QR code...',
       });
-    } catch (err) {
-      console.error('Failed to validate booking:', err);
+
+      // Parse QR code
+      const parsed = parseBookingQRCode(decodedText);
+      if (!parsed) {
+        setScanResult({
+          type: 'error',
+          message: 'Invalid QR code format',
+        });
+        return;
+      }
+
+      console.log('QR Code parsed successfully:', parsed);
+
+      // Fetch booking from database with retry logic
+      let retries = 3;
+      let lastError: any = null;
+
+      while (retries > 0) {
+        try {
+          const client = getAmplifyClient();
+          if (!client) {
+            throw new Error('Amplify client not configured');
+          }
+
+          const result = await client.models.Booking.get({ id: parsed.bookingId });
+
+          if (!result.data) {
+            setScanResult({
+              type: 'error',
+              message: 'Booking not found',
+            });
+            return;
+          }
+
+          const booking = result.data as unknown as Booking;
+
+          // Validate booking
+          const validation = validateBookingQRCode(decodedText, {
+            id: booking.id,
+            eventID: booking.eventID,
+            userID: booking.userID,
+            status: booking.status,
+            checkedIn: booking.checkedIn ?? null,
+          });
+
+          if (!validation.valid) {
+            setScanResult({
+              type: 'error',
+              message: validation.reason || 'Invalid ticket',
+            });
+            return;
+          }
+
+          // Mark as checked in
+          await client.models.Booking.update({
+            id: booking.id,
+            checkedIn: true,
+            checkedInAt: new Date().toISOString(),
+          });
+
+          setScanResult({
+            type: 'success',
+            message: `Successfully checked in ${booking.userName || 'guest'}`,
+            booking,
+          });
+          return; // Success, exit retry loop
+        } catch (err) {
+          lastError = err;
+          retries--;
+          if (retries > 0) {
+            console.warn(`Validation failed, retrying... (${retries} attempts left)`);
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s before retry
+          }
+        }
+      }
+
+      // All retries failed
+      console.error('Failed to validate booking after retries:', lastError);
       setScanResult({
         type: 'error',
-        message: 'Failed to validate ticket',
+        message: 'Network error. Please check your connection and try again.',
+      });
+    } catch (err) {
+      console.error('Error processing scan:', err);
+      setScanResult({
+        type: 'error',
+        message: 'Failed to process QR code',
       });
     }
+    // Note: scanningLockRef is reset when user clicks "Scan Next Ticket" or in stopScanning
   };
 
   const onScanError = (errorMessage: string) => {
@@ -307,13 +374,8 @@ export function QRScanner() {
 
   useEffect(() => {
     return () => {
-      if (html5QrCodeRef.current) {
-        try {
-          html5QrCodeRef.current.clear();
-        } catch (err) {
-          console.error('Failed to clear scanner:', err);
-        }
-      }
+      // Ensure camera & instance cleaned up on unmount
+      void stopScanning();
     };
   }, []);
 
