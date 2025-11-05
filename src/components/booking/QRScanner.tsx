@@ -105,14 +105,35 @@ export function QRScanner() {
         return;
       }
 
-      // Initialize html5-qrcode if needed
-      if (!html5QrCodeRef.current) {
-        html5QrCodeRef.current = new Html5Qrcode(scannerDivId);
+      // Check if scanner div exists
+      const scannerDiv = document.getElementById(scannerDivId);
+      if (!scannerDiv) {
+        const errorMsg = 'Scanner container not found. Please refresh the page.';
+        setCameraError(errorMsg);
+        alert(errorMsg);
+        return;
       }
 
-      // Start scanning with both rear camera preference and fallback
-      console.log('Starting QR code scanner...');
+      // Clear any existing scanner instance
+      if (html5QrCodeRef.current) {
+        try {
+          console.log('Clearing existing scanner instance...');
+          await html5QrCodeRef.current.clear();
+          html5QrCodeRef.current = null;
+        } catch (clearErr) {
+          console.warn('Error clearing existing scanner:', clearErr);
+        }
+      }
+
+      // Initialize html5-qrcode
+      console.log('Initializing new Html5Qrcode instance...');
+      html5QrCodeRef.current = new Html5Qrcode(scannerDivId);
+
+      // Start scanning with rear camera preference
+      console.log('Starting QR code scanner with rear camera...');
+
       try {
+        // Try with rear camera first
         await html5QrCodeRef.current.start(
           { facingMode: { ideal: 'environment' } },
           {
@@ -125,23 +146,55 @@ export function QRScanner() {
         );
 
         setIsScanning(true);
-        console.log('Scanner started successfully');
+        console.log('Scanner started successfully with rear camera');
       } catch (scannerErr: any) {
+        console.error('Failed to start with rear camera');
         console.error('Scanner initialization error:', scannerErr);
+        console.error('Error type:', typeof scannerErr);
+        console.error('Error name:', scannerErr?.name);
+        console.error('Error message:', scannerErr?.message);
+        console.error('Error string:', String(scannerErr));
+        console.error('Full error object:', JSON.stringify(scannerErr, Object.getOwnPropertyNames(scannerErr)));
 
-        let errorMsg = '';
-        if (scannerErr.name === 'NotAllowedError') {
-          errorMsg = 'Camera permission was denied. Please reload the page and click "Allow" when prompted.';
-        } else if (scannerErr.message?.includes('permission') || scannerErr.message?.includes('Permission')) {
-          errorMsg = 'Camera permission is required. Please enable camera access in your browser settings and try again.';
-        } else if (scannerErr.message) {
-          errorMsg = `Scanner error: ${scannerErr.message}`;
-        } else {
-          errorMsg = 'Failed to start scanner. Please check camera permissions and try again.';
+        // Try with front camera as fallback
+        try {
+          console.log('Trying front camera as fallback...');
+          await html5QrCodeRef.current.start(
+            { facingMode: 'user' }, // Try front camera
+            {
+              fps: 10,
+              qrbox: { width: 250, height: 250 },
+              aspectRatio: 1.0,
+            },
+            onScanSuccess,
+            onScanError
+          );
+
+          setIsScanning(true);
+          console.log('Scanner started successfully with front camera');
+        } catch (frontCameraErr: any) {
+          console.error('Failed to start with front camera:', frontCameraErr);
+
+          // Both cameras failed, show detailed error
+          let errorMsg = '';
+          if (scannerErr.name === 'NotAllowedError' || frontCameraErr.name === 'NotAllowedError') {
+            errorMsg = 'Camera permission was denied. Please reload the page and click "Allow" when prompted.';
+          } else if (scannerErr.message?.includes('permission') || scannerErr.message?.includes('Permission')) {
+            errorMsg = 'Camera permission is required. Please enable camera access in your browser settings and try again.';
+          } else if (scannerErr.message) {
+            errorMsg = `Scanner error: ${scannerErr.message}\n\nError details: ${String(scannerErr)}`;
+          } else if (typeof scannerErr === 'string') {
+            errorMsg = `Scanner error: ${scannerErr}`;
+          } else {
+            // Show the full error for debugging
+            const errorDetails = JSON.stringify(scannerErr, Object.getOwnPropertyNames(scannerErr), 2);
+            errorMsg = `Failed to start scanner.\n\nError details: ${String(scannerErr)}\n\nFull error: ${errorDetails}`;
+          }
+
+          setCameraError(errorMsg);
+          // Don't show alert for now, just display in UI for better debugging
+          console.error('Final error message:', errorMsg);
         }
-
-        setCameraError(errorMsg);
-        alert(errorMsg);
       }
     } catch (err: any) {
       console.error('Unexpected error in startScanning:', err);
