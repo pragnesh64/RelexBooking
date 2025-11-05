@@ -137,9 +137,10 @@ export function QRScanner() {
         await html5QrCodeRef.current.start(
           { facingMode: 'environment' }, // Correct format for html5-qrcode
           {
-            fps: 10,
-            qrbox: { width: 250, height: 250 },
-            aspectRatio: 1.0,
+            fps: 20, // Increased for faster detection
+            qrbox: { width: 300, height: 300 }, // Larger scan box
+            aspectRatio: 1.777778, // 16:9 aspect ratio
+            disableFlip: false, // Allow flipped QR codes
           },
           onScanSuccess,
           onScanError
@@ -165,9 +166,10 @@ export function QRScanner() {
           await html5QrCodeRef.current.start(
             { facingMode: 'user' }, // Front camera
             {
-              fps: 10,
-              qrbox: { width: 250, height: 250 },
-              aspectRatio: 1.0,
+              fps: 20, // Increased for faster detection
+              qrbox: { width: 300, height: 300 }, // Larger scan box
+              aspectRatio: 1.777778, // 16:9 aspect ratio
+              disableFlip: false, // Allow flipped QR codes
             },
             onScanSuccess,
             onScanError
@@ -216,8 +218,16 @@ export function QRScanner() {
   };
 
   const onScanSuccess = async (decodedText: string) => {
+    console.log('QR Code detected!', decodedText);
+
     // Stop scanning immediately to prevent multiple scans
     await stopScanning();
+
+    // Show processing message
+    setScanResult({
+      type: 'warning',
+      message: 'Processing QR code...',
+    });
 
     // Parse QR code
     const parsed = parseBookingQRCode(decodedText);
@@ -228,6 +238,8 @@ export function QRScanner() {
       });
       return;
     }
+
+    console.log('QR Code parsed successfully:', parsed);
 
     // Fetch booking from database
     try {
@@ -339,10 +351,19 @@ export function QRScanner() {
 
           <div
             id={scannerDivId}
-            className={`rounded-lg overflow-hidden ${isScanning ? 'block' : 'hidden'}`}
+            className={`rounded-lg overflow-hidden bg-black ${isScanning ? 'block' : 'hidden'}`}
+            style={{ minHeight: '300px', width: '100%' }}
           />
 
-          {!isScanning && !scanResult && (
+          {isScanning && (
+            <div className="p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <p className="text-sm text-blue-800 dark:text-blue-400 text-center">
+                📷 Camera active - Point at QR code to scan automatically
+              </p>
+            </div>
+          )}
+
+          {!isScanning && !scanResult && !cameraError && (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Camera className="h-16 w-16 text-gray-300 dark:text-gray-700 mb-4" />
               <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -358,12 +379,16 @@ export function QRScanner() {
           className={`p-6 ${
             scanResult.type === 'success'
               ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800'
+              : scanResult.type === 'warning'
+              ? 'bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800'
               : 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800'
           }`}
         >
           <div className="flex items-start gap-4">
             {scanResult.type === 'success' ? (
               <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+            ) : scanResult.type === 'warning' ? (
+              <AlertCircle className="h-6 w-6 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5 animate-pulse" />
             ) : (
               <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
             )}
@@ -372,15 +397,23 @@ export function QRScanner() {
                 className={`font-semibold mb-2 ${
                   scanResult.type === 'success'
                     ? 'text-green-900 dark:text-green-100'
+                    : scanResult.type === 'warning'
+                    ? 'text-yellow-900 dark:text-yellow-100'
                     : 'text-red-900 dark:text-red-100'
                 }`}
               >
-                {scanResult.type === 'success' ? 'Check-in Successful' : 'Check-in Failed'}
+                {scanResult.type === 'success'
+                  ? 'Check-in Successful'
+                  : scanResult.type === 'warning'
+                  ? 'Processing...'
+                  : 'Check-in Failed'}
               </h4>
               <p
                 className={`text-sm mb-4 ${
                   scanResult.type === 'success'
                     ? 'text-green-800 dark:text-green-300'
+                    : scanResult.type === 'warning'
+                    ? 'text-yellow-800 dark:text-yellow-300'
                     : 'text-red-800 dark:text-red-300'
                 }`}
               >
