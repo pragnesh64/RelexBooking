@@ -133,9 +133,9 @@ export function QRScanner() {
       console.log('Starting QR code scanner with rear camera...');
 
       try {
-        // Try with rear camera first
+        // Try with rear camera first (use string format, not object with 'ideal')
         await html5QrCodeRef.current.start(
-          { facingMode: { ideal: 'environment' } },
+          { facingMode: 'environment' }, // Correct format for html5-qrcode
           {
             fps: 10,
             qrbox: { width: 250, height: 250 },
@@ -154,13 +154,16 @@ export function QRScanner() {
         console.error('Error name:', scannerErr?.name);
         console.error('Error message:', scannerErr?.message);
         console.error('Error string:', String(scannerErr));
-        console.error('Full error object:', JSON.stringify(scannerErr, Object.getOwnPropertyNames(scannerErr)));
 
         // Try with front camera as fallback
         try {
           console.log('Trying front camera as fallback...');
+
+          // Need to clear the failed scanner first
+          await html5QrCodeRef.current.clear();
+
           await html5QrCodeRef.current.start(
-            { facingMode: 'user' }, // Try front camera
+            { facingMode: 'user' }, // Front camera
             {
               fps: 10,
               qrbox: { width: 250, height: 250 },
@@ -182,17 +185,14 @@ export function QRScanner() {
           } else if (scannerErr.message?.includes('permission') || scannerErr.message?.includes('Permission')) {
             errorMsg = 'Camera permission is required. Please enable camera access in your browser settings and try again.';
           } else if (scannerErr.message) {
-            errorMsg = `Scanner error: ${scannerErr.message}\n\nError details: ${String(scannerErr)}`;
+            errorMsg = `Scanner error: ${scannerErr.message}`;
           } else if (typeof scannerErr === 'string') {
             errorMsg = `Scanner error: ${scannerErr}`;
           } else {
-            // Show the full error for debugging
-            const errorDetails = JSON.stringify(scannerErr, Object.getOwnPropertyNames(scannerErr), 2);
-            errorMsg = `Failed to start scanner.\n\nError details: ${String(scannerErr)}\n\nFull error: ${errorDetails}`;
+            errorMsg = `Failed to start scanner: ${String(scannerErr)}`;
           }
 
           setCameraError(errorMsg);
-          // Don't show alert for now, just display in UI for better debugging
           console.error('Final error message:', errorMsg);
         }
       }
