@@ -5,7 +5,7 @@ The section below creates Event and Booking database tables with proper
 authorization rules for role-based access control.
 
 Authorization Rules:
-- Events: Public read, Organizers can create/update their own, Admins can manage all
+- Events: Public read, Organizers can create and read ALL events (update/delete only their own), Admins can manage all
 - Bookings: Users can create/read their own, Organizers can read event bookings, Admins can manage all
 =========================================================================*/
 const schema = a.schema({
@@ -32,8 +32,10 @@ const schema = a.schema({
       allow.publicApiKey().to(["read"]),
       // Authenticated users can read
       allow.authenticated().to(["read"]),
-      // Organizers can create/update/delete their own events
-      allow.ownerDefinedIn("organizerID").identityClaim("sub").to(["create", "update", "delete"]),
+      // Organizers can create and READ ALL events (not just their own)
+      allow.group("Organizer").to(["create", "read"]),
+      // Organizers can update/delete ONLY their own events
+      allow.ownerDefinedIn("organizerID").identityClaim("sub").to(["update", "delete"]),
       // Admins and SuperAdmins can manage all events
       allow.group("Admin").to(["create", "read", "update", "delete"]),
       allow.group("SuperAdmin").to(["create", "read", "update", "delete"]),

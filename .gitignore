@@ -28,3 +28,8 @@ dist-ssr
 amplify_outputs*
 amplifyconfiguration*
 amplify_outputs.json
+
+# SSL certificates for local development
+*.pem
+localhost-key.pem
+localhost.pem

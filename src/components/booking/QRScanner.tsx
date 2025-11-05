@@ -20,29 +20,134 @@ export function QRScanner() {
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const scannerDivId = 'qr-reader';
 
+  const checkCameraPermission = async (): Promise<'granted' | 'denied' | 'prompt'> => {
+    // Try to check permission state first (if supported)
+    if ('permissions' in navigator) {
+      try {
+        const permissionStatus = await navigator.permissions.query({ name: 'camera' as PermissionName });
+        return permissionStatus.state as 'granted' | 'denied' | 'prompt';
+      } catch (err) {
+        console.log('Permission API not fully supported, will request directly');
+      }
+    }
+    return 'prompt';
+  };
+
   const startScanning = async () => {
     try {
       setCameraError(null);
       setScanResult(null);
 
+      // Check if running on HTTPS or localhost
+      if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+        const errorMsg = 'Camera access requires HTTPS. Please access the site via HTTPS.';
+        setCameraError(errorMsg);
+        alert(errorMsg);
+        return;
+      }
+
+      // Check if browser supports camera
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        const errorMsg = 'Your browser does not support camera access. Please use a modern browser like Chrome, Safari, or Firefox.';
+        setCameraError(errorMsg);
+        alert(errorMsg);
+        return;
+      }
+
+      // Check current permission state
+      const permissionState = await checkCameraPermission();
+      console.log('Camera permission state:', permissionState);
+
+      if (permissionState === 'denied') {
+        const errorMsg = 'Camera permission is blocked. Please enable camera access in your browser settings:\n\n' +
+          '• Android: Settings → Apps → Browser → Permissions → Camera → Allow\n' +
+          '• iOS: Settings → Safari → Camera → Allow\n\n' +
+          'Then reload this page.';
+        setCameraError(errorMsg);
+        alert(errorMsg);
+        return;
+      }
+
+      // Request camera permission explicitly first
+      let stream: MediaStream | null = null;
+      try {
+        console.log('Requesting camera permission...');
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' }
+        });
+        console.log('Camera permission granted');
+
+        // Stop the test stream
+        stream.getTracks().forEach(track => track.stop());
+      } catch (permErr: any) {
+        console.error('Camera permission error:', permErr);
+        let errorMsg = '';
+
+        if (permErr.name === 'NotAllowedError' || permErr.name === 'PermissionDeniedError') {
+          errorMsg = 'Camera permission was denied. Please click "Allow" when prompted, or enable camera access in your browser settings:\n\n' +
+            '• Android: Settings → Apps → Browser → Permissions → Camera → Allow\n' +
+            '• iOS: Settings → Safari → Camera → Allow\n\n' +
+            'Then try again.';
+        } else if (permErr.name === 'NotFoundError' || permErr.name === 'DevicesNotFoundError') {
+          errorMsg = 'No camera was found on this device. Please ensure your device has a working camera.';
+        } else if (permErr.name === 'NotReadableError' || permErr.name === 'TrackStartError') {
+          errorMsg = 'Camera is already in use by another application. Please close other apps using the camera and try again.';
+        } else if (permErr.name === 'OverconstrainedError') {
+          errorMsg = 'Camera constraints could not be satisfied. Your device may not support the rear camera.';
+        } else if (permErr.name === 'SecurityError') {
+          errorMsg = 'Camera access is blocked due to security settings. Please ensure you are using HTTPS.';
+        } else {
+          errorMsg = `Camera error: ${permErr.message || 'Unable to access camera'}.\n\nPlease check your browser permissions and try again.`;
+        }
+
+        setCameraError(errorMsg);
+        alert(errorMsg);
+        return;
+      }
+
+      // Initialize html5-qrcode if needed
       if (!html5QrCodeRef.current) {
         html5QrCodeRef.current = new Html5Qrcode(scannerDivId);
       }
 
-      await html5QrCodeRef.current.start(
-        { facingMode: 'environment' },
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-        },
-        onScanSuccess,
-        onScanError
-      );
+      // Start scanning with both rear camera preference and fallback
+      console.log('Starting QR code scanner...');
+      try {
+        await html5QrCodeRef.current.start(
+          { facingMode: { ideal: 'environment' } },
+          {
+            fps: 10,
+            qrbox: { width: 250, height: 250 },
+            aspectRatio: 1.0,
+          },
+          onScanSuccess,
+          onScanError
+        );
 
-      setIsScanning(true);
-    } catch (err) {
-      console.error('Failed to start scanner:', err);
-      setCameraError('Failed to access camera. Please check permissions.');
+        setIsScanning(true);
+        console.log('Scanner started successfully');
+      } catch (scannerErr: any) {
+        console.error('Scanner initialization error:', scannerErr);
+
+        let errorMsg = '';
+        if (scannerErr.name === 'NotAllowedError') {
+          errorMsg = 'Camera permission was denied. Please reload the page and click "Allow" when prompted.';
+        } else if (scannerErr.message?.includes('permission') || scannerErr.message?.includes('Permission')) {
+          errorMsg = 'Camera permission is required. Please enable camera access in your browser settings and try again.';
+        } else if (scannerErr.message) {
+          errorMsg = `Scanner error: ${scannerErr.message}`;
+        } else {
+          errorMsg = 'Failed to start scanner. Please check camera permissions and try again.';
+        }
+
+        setCameraError(errorMsg);
+        alert(errorMsg);
+      }
+    } catch (err: any) {
+      console.error('Unexpected error in startScanning:', err);
+      const errorMsg = `Failed to access camera: ${err.message || 'Unknown error'}. Please check permissions and try again.`;
+      setCameraError(errorMsg);
+      alert(errorMsg);
     }
   };
 
@@ -167,8 +272,15 @@ export function QRScanner() {
           </div>
 
           {cameraError && (
-            <div className="p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg">
-              <p className="text-sm text-red-800 dark:text-red-400">{cameraError}</p>
+            <div className="p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg space-y-3">
+              <p className="text-sm font-semibold text-red-800 dark:text-red-400 whitespace-pre-line">{cameraError}</p>
+              <Button
+                onClick={startScanning}
+                size="sm"
+                className="mt-2"
+              >
+                Try Again
+              </Button>
             </div>
           )}
 

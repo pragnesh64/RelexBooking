@@ -2,10 +2,11 @@ import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CreateEventForm } from "@/components/forms/CreateEventForm";
 import { useState } from "react";
 
 export function Organizer() {
-  const setShowCreateModal = useState(false)[1];
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // TODO: Fetch organizer events from Amplify
   // const { data: events, loading, error } = useOrganizerEvents();
@@ -72,6 +73,12 @@ export function Organizer() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Create Event Modal */}
+      <CreateEventForm
+        open={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+      />
     </motion.section>
   );
 }
