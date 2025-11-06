@@ -1,9 +1,9 @@
 import { useState, useEffect, createContext, useContext } from 'react';
-import { 
-  signIn, 
-  signUp, 
-  signOut, 
-  confirmSignUp, 
+import {
+  signIn,
+  signUp,
+  signOut,
+  confirmSignUp,
   resendSignUpCode,
   getCurrentUser,
   fetchAuthSession,
@@ -12,6 +12,31 @@ import {
   type SignInOutput,
   type SignUpOutput,
 } from 'aws-amplify/auth';
+
+/**
+ * Authentication & Authorization Hook - AWS Amplify + Cognito
+ *
+ * Security Architecture:
+ * - Uses AWS Amplify with Amazon Cognito for managed authentication
+ * - Tokens (access, ID, refresh) are managed by Amplify SDK (secure storage)
+ * - Access tokens are short-lived (default: 1 hour)
+ * - Refresh tokens are httpOnly cookies managed by AWS
+ * - Token rotation and refresh handled automatically by Amplify
+ * - User groups/roles come from Cognito token claims (cognito:groups)
+ *
+ * IMPORTANT Security Notes:
+ * - Client-side auth checks are UX convenience only
+ * - Backend must ALWAYS validate tokens and permissions
+ * - Never trust client-side role/permission checks for security
+ * - Use Amplify's GraphQL @auth directives for API protection
+ * - Consider implementing session keepalive for QR scanning workflows
+ *
+ * Token Flow:
+ * 1. Login: Cognito issues access token (stored by Amplify)
+ * 2. API calls: Amplify automatically attaches Bearer token
+ * 3. Refresh: Amplify automatically refreshes on 401/token expiry
+ * 4. Logout: Tokens invalidated, session cleared
+ */
 
 export type UserRole = 'User' | 'Organizer' | 'Admin' | 'SuperAdmin' | 'Pending';
 

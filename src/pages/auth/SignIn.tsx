@@ -9,7 +9,7 @@ import { Loader2, Mail, Lock, AlertCircle } from 'lucide-react';
 export function SignIn() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { signIn } = useAuth();
+  const { signIn, isAuthenticated } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -21,6 +21,12 @@ export function SignIn() {
       ? ((location.state as LocationState).from?.pathname ?? "/")
       : "/";
 
+  // If already authenticated, redirect to dashboard or intended destination
+  if (isAuthenticated) {
+    navigate(from, { replace: true });
+    return null;
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -30,25 +36,59 @@ export function SignIn() {
       await signIn(email, password);
       navigate(from, { replace: true });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to sign in";
+      // Provide user-friendly error messages
+      let message = "Failed to sign in. Please try again.";
+
+      if (err instanceof Error) {
+        if (err.message.includes('UserNotFoundException') || err.message.includes('NotAuthorizedException')) {
+          message = "Invalid email or password. Please check your credentials and try again.";
+        } else if (err.message.includes('UserNotConfirmedException')) {
+          message = "Please verify your email address first. Check your inbox for the verification code.";
+          setTimeout(() => navigate('/verify-email', { state: { email } }), 2000);
+        } else if (err.message.includes('TooManyRequestsException')) {
+          message = "Too many failed attempts. Please try again in a few minutes.";
+        } else if (err.message.includes('NetworkError')) {
+          message = "Network error. Please check your internet connection and try again.";
+        } else {
+          message = err.message;
+        }
+      }
+
       setError(message);
     } finally {
       setLoading(false);
     }
   };
 
+  // Show friendly message about intended destination
+  const showDestinationMessage = from !== '/' && from !== '/dashboard';
+  const destinationName = from.split('/').filter(Boolean).map(
+    part => part.charAt(0).toUpperCase() + part.slice(1)
+  ).join(' → ');
+
   return (
     <div className="flex items-center justify-center min-h-screen bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
-          <CardDescription>Sign in to your account to continue</CardDescription>
+          <CardDescription>
+            {showDestinationMessage
+              ? `Please sign in to access ${destinationName}`
+              : 'Sign in to your account to continue'}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            {showDestinationMessage && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400 text-sm border border-blue-200 dark:border-blue-800">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                <span>You'll be redirected to <strong>{from}</strong> after signing in</span>
+              </div>
+            )}
+
             {error && (
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
-                <AlertCircle className="h-4 w-4" />
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm border border-destructive/20">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
                 <span>{error}</span>
               </div>
             )}
