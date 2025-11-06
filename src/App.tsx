@@ -25,9 +25,14 @@ import { Button } from "./components/ui/button";
 
 function Unauthorized() {
   const location = useLocation();
-  const state = location.state as { from?: { pathname?: string }; requiredRole?: string } | null;
+  const state = location.state as {
+    from?: { pathname?: string };
+    requiredRole?: string;
+    userRoles?: string;
+  } | null;
   const attemptedPath = state?.from?.pathname;
   const requiredRole = state?.requiredRole;
+  const userRoles = state?.userRoles;
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background p-4">
@@ -50,9 +55,16 @@ function Unauthorized() {
               You don't have permission to access this resource.
             </p>
             {requiredRole && (
-              <p className="text-sm text-destructive font-medium">
-                Required role: {requiredRole}
-              </p>
+              <div className="space-y-1">
+                <p className="text-sm text-destructive font-medium">
+                  Required role: {requiredRole}
+                </p>
+                {userRoles && (
+                  <p className="text-xs text-muted-foreground">
+                    Your roles: <code className="bg-muted px-2 py-1 rounded">{userRoles}</code>
+                  </p>
+                )}
+              </div>
             )}
             {attemptedPath && (
               <p className="text-xs text-muted-foreground">

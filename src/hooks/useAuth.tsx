@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext } from 'react';
+import { useState, useEffect, createContext, useContext, useRef } from 'react';
 import {
   signIn,
   signUp,
@@ -12,6 +12,7 @@ import {
   type SignInOutput,
   type SignUpOutput,
 } from 'aws-amplify/auth';
+import { Hub } from 'aws-amplify/utils';
 
 /**
  * Authentication & Authorization Hook - AWS Amplify + Cognito
@@ -60,6 +61,7 @@ interface AuthContextType {
   resendSignUpCode: (email: string) => Promise<void>;
   refreshUser: () => Promise<void>;
   updateUserAttributes: (attributes: { name?: string; phoneNumber?: string }) => Promise<void>;
+  getAccessToken: () => Promise<string | null>;
   hasRole: (role: UserRole | ReadonlyArray<UserRole>) => boolean;
   isOrganizer: boolean;
   isAdmin: boolean;
@@ -71,21 +73,25 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const accessTokenRef = useRef<string | null>(null);
 
   const loadUser = async () => {
     try {
       const currentUser = await getCurrentUser();
       const session = await fetchAuthSession();
       const attributes = await fetchUserAttributes();
-      
+
       // Extract groups from token
       const groups = (session.tokens?.accessToken?.payload['cognito:groups'] as string[]) || [];
-      
+
+      // Store access token in ref (memory only, not localStorage)
+      accessTokenRef.current = session.tokens?.accessToken?.toString() || null;
+
       // Get user attributes
       const email = attributes.email || currentUser.signInDetails?.loginId;
       const name = attributes.preferred_username || attributes.email?.split('@')[0] || '';
       const phoneNumber = attributes.phone_number || '';
-      
+
       setUser({
         username: currentUser.username,
         userId: currentUser.userId,
@@ -97,13 +103,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.log('No authenticated user:', error);
       setUser(null);
+      accessTokenRef.current = null;
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadUser();
+    // Initial load
+    void loadUser();
+
+    // Listen for auth events (sign-in, sign-out, token refresh)
+    // This enables multi-tab sync and automatic re-hydration
+    const unsubscribe = Hub.listen('auth', ({ payload }) => {
+      const { event } = payload;
+
+      console.log('Auth event:', event);
+
+      switch (event) {
+        case 'signedIn':
+        case 'tokenRefresh':
+          console.log('User signed in or token refreshed, reloading user...');
+          void loadUser();
+          break;
+        case 'signedOut':
+          console.log('User signed out');
+          setUser(null);
+          accessTokenRef.current = null;
+          break;
+        case 'tokenRefresh_failure':
+          console.warn('Token refresh failed');
+          setUser(null);
+          accessTokenRef.current = null;
+          break;
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const handleSignIn = async (email: string, password: string) => {
@@ -154,6 +190,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await loadUser(); // Refresh user data
   };
 
+  /**
+   * Get current access token
+   * Uses fetchAuthSession which automatically handles token refresh
+   * Token is stored in memory (ref) to avoid localStorage exposure
+   */
+  const getAccessToken = async (): Promise<string | null> => {
+    try {
+      const session = await fetchAuthSession();
+      const token = session.tokens?.accessToken?.toString() || null;
+      accessTokenRef.current = token;
+      return token;
+    } catch (error) {
+      console.error('Failed to get access token:', error);
+      accessTokenRef.current = null;
+      return null;
+    }
+  };
+
   const hasRole = (role: UserRole | ReadonlyArray<UserRole>): boolean => {
     if (!user) return false;
     const roles = Array.isArray(role) ? role : [role];
@@ -177,6 +231,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         resendSignUpCode: handleResendSignUpCode,
         refreshUser: loadUser,
         updateUserAttributes: handleUpdateUserAttributes,
+        getAccessToken,
         hasRole,
         isOrganizer,
         isAdmin,
