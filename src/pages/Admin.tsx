@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Users,
@@ -15,6 +16,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useAuth } from '@/hooks/useAuth';
+import { Loader2 } from 'lucide-react';
 
 // Mock data - replace with real API calls
 const mockStats = {
@@ -73,8 +76,39 @@ const mockKYCRequests = [
 ];
 
 export function Admin() {
+  const { user, loading, isAdmin, isSuperAdmin } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTab, setSelectedTab] = useState('overview');
+
+  // CRITICAL SECURITY: Server-side + client-side permission check
+  // This is a defense-in-depth approach - even if route protection fails,
+  // this component will not render admin content to unauthorized users
+  useEffect(() => {
+    // Log access attempts for security auditing
+    if (!loading && user && !isAdmin && !isSuperAdmin) {
+      console.warn('[SECURITY] Unauthorized access attempt to Admin page:', {
+        userId: user.userId,
+        email: user.email,
+        groups: user.groups,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }, [loading, user, isAdmin, isSuperAdmin]);
+
+  // Show loading state while checking permissions
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // CRITICAL: Block unauthorized access - redirect to unauthorized page
+  // This is a client-side guard (UX), but backend must also enforce this
+  if (!user || (!isAdmin && !isSuperAdmin)) {
+    return <Navigate to="/unauthorized" replace />;
+  }
 
   const handleApproveKYC = (userId: string) => {
     // TODO: Implement KYC approval and role promotion

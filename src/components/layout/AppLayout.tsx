@@ -31,6 +31,13 @@ export function AppLayout() {
 
     // Add organizer-only routes
     if (isOrganizer) {
+      // Insert "Organizer" before "Profile" (to maintain logical order)
+      const profileIndex = routes.findIndex(r => r.href === "/profile");
+      if (profileIndex !== -1) {
+        routes.splice(profileIndex, 0, { href: "/organizer", label: "Organizer" });
+      } else {
+        routes.push({ href: "/organizer", label: "Organizer" });
+      }
       routes.push({ href: "/scan-ticket", label: "Scan Ticket" });
     }
 

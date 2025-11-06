@@ -13,6 +13,7 @@ import {
   type SignUpOutput,
 } from 'aws-amplify/auth';
 import { Hub } from 'aws-amplify/utils';
+import { type Permission, getPermissionsForRoles } from '@/types/permissions';
 
 /**
  * Authentication & Authorization Hook - AWS Amplify + Cognito
@@ -48,6 +49,7 @@ export interface AuthUser {
   name?: string;
   phoneNumber?: string;
   groups: UserRole[];
+  permissions: Permission[];
 }
 
 interface AuthContextType {
@@ -63,6 +65,9 @@ interface AuthContextType {
   updateUserAttributes: (attributes: { name?: string; phoneNumber?: string }) => Promise<void>;
   getAccessToken: () => Promise<string | null>;
   hasRole: (role: UserRole | ReadonlyArray<UserRole>) => boolean;
+  hasPermission: (permission: Permission) => boolean;
+  hasAnyPermission: (permissions: Permission[]) => boolean;
+  hasAllPermissions: (permissions: Permission[]) => boolean;
   isOrganizer: boolean;
   isAdmin: boolean;
   isSuperAdmin: boolean;
@@ -81,8 +86,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const session = await fetchAuthSession();
       const attributes = await fetchUserAttributes();
 
-      // Extract groups from token
+      // Extract groups from access token
       const groups = (session.tokens?.accessToken?.payload['cognito:groups'] as string[]) || [];
+
+      // Extract permissions from ID token (added by Pre Token Generation Lambda)
+      // The Lambda will add permissions as a space-separated string in 'custom:permissions'
+      const idTokenPayload = session.tokens?.idToken?.payload;
+      let permissions: Permission[] = [];
+
+      // Try to get permissions from ID token (added by Lambda)
+      const permissionsString = idTokenPayload?.['custom:permissions'] as string | undefined;
+
+      if (permissionsString && typeof permissionsString === 'string') {
+        // Parse space-separated permissions string from token
+        permissions = permissionsString.split(' ').filter(Boolean) as Permission[];
+        console.log('Permissions loaded from ID token:', permissions.length);
+      } else {
+        // Fallback: Derive permissions from roles (for development/testing)
+        // In production, permissions should come from the Lambda
+        permissions = getPermissionsForRoles(groups);
+        console.log('Permissions derived from roles (Lambda not configured):', permissions.length);
+      }
 
       // Store access token in ref (memory only, not localStorage)
       accessTokenRef.current = session.tokens?.accessToken?.toString() || null;
@@ -99,6 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         name,
         phoneNumber,
         groups: groups as UserRole[],
+        permissions,
       });
     } catch (error) {
       console.log('No authenticated user:', error);
@@ -208,15 +233,62 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  /**
+   * Check if user has a specific role
+   * SECURITY: Returns false if user is null, undefined, or groups are empty
+   * Never defaults to true - fails secure
+   */
   const hasRole = (role: UserRole | ReadonlyArray<UserRole>): boolean => {
-    if (!user) return false;
+    // CRITICAL: Fail secure - if no user, no permissions
+    if (!user || !user.groups || user.groups.length === 0) {
+      return false;
+    }
     const roles = Array.isArray(role) ? role : [role];
+    // Check if user has any of the required roles
     return roles.some(r => user.groups.includes(r));
   };
 
-  const isOrganizer = hasRole(['Organizer', 'Admin', 'SuperAdmin']);
-  const isAdmin = hasRole(['Admin', 'SuperAdmin']);
-  const isSuperAdmin = hasRole('SuperAdmin');
+  /**
+   * Check if user has a specific permission
+   * SECURITY: Returns false if user is null or permissions are empty
+   * Never defaults to true - fails secure
+   */
+  const hasPermission = (permission: Permission): boolean => {
+    // CRITICAL: Fail secure - if no user or no permissions, deny access
+    if (!user || !user.permissions || user.permissions.length === 0) {
+      return false;
+    }
+    return user.permissions.includes(permission);
+  };
+
+  /**
+   * Check if user has any of the specified permissions
+   * SECURITY: Returns false if user is null or permissions are empty
+   */
+  const hasAnyPermission = (permissions: Permission[]): boolean => {
+    if (!user || !user.permissions || user.permissions.length === 0) {
+      return false;
+    }
+    return permissions.some(p => user.permissions.includes(p));
+  };
+
+  /**
+   * Check if user has all of the specified permissions
+   * SECURITY: Returns false if user is null or permissions are empty
+   */
+  const hasAllPermissions = (permissions: Permission[]): boolean => {
+    if (!user || !user.permissions || user.permissions.length === 0) {
+      return false;
+    }
+    return permissions.every(p => user.permissions.includes(p));
+  };
+
+  // CRITICAL: These computed properties must be functions, not values
+  // This ensures they're re-evaluated when user state changes
+  // SECURITY: All return false if user is null/undefined or groups are empty
+  const isOrganizer = user ? hasRole(['Organizer', 'Admin', 'SuperAdmin']) : false;
+  const isAdmin = user ? hasRole(['Admin', 'SuperAdmin']) : false;
+  const isSuperAdmin = user ? hasRole('SuperAdmin') : false;
 
   return (
     <AuthContext.Provider
@@ -233,6 +305,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         updateUserAttributes: handleUpdateUserAttributes,
         getAccessToken,
         hasRole,
+        hasPermission,
+        hasAnyPermission,
+        hasAllPermissions,
         isOrganizer,
         isAdmin,
         isSuperAdmin,

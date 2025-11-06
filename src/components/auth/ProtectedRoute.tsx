@@ -1,5 +1,6 @@
 import { Navigate, useLocation, Outlet } from 'react-router-dom';
 import { useAuth, type UserRole } from '@/hooks/useAuth';
+import { type Permission } from '@/types/permissions';
 import { Loader2, Shield } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
@@ -10,20 +11,28 @@ interface ProtectedRouteProps {
   requireOrganizer?: boolean;
   requireAdmin?: boolean;
   requireSuperAdmin?: boolean;
+  // Permission-based access control (fine-grained)
+  requirePermission?: Permission;
+  requirePermissions?: Permission[];
+  requireAllPermissions?: boolean; // If true, user needs ALL permissions; if false, ANY permission is enough
 }
 
 /**
- * ProtectedRoute component - guards routes requiring authentication and/or roles
+ * ProtectedRoute component - guards routes requiring authentication, roles, and/or permissions
  *
  * Usage patterns:
  * 1. With children: <ProtectedRoute><Component /></ProtectedRoute>
  * 2. With Outlet (React Router v6): <Route element={<ProtectedRoute />}><Route ... /></Route>
+ * 3. Role-based: <ProtectedRoute requireAdmin><AdminPanel /></ProtectedRoute>
+ * 4. Permission-based: <ProtectedRoute requirePermission={PERMISSIONS.EVENT_CREATE}><CreateEvent /></ProtectedRoute>
+ * 5. Multiple permissions: <ProtectedRoute requirePermissions={[PERMISSIONS.TICKET_SCAN, PERMISSIONS.TICKET_VALIDATE]} requireAllPermissions={true}>
  *
  * Security notes:
  * - Client-side route protection is UX convenience only
  * - Backend must always validate authentication and permissions
  * - AWS Amplify handles token refresh automatically via Cognito
  * - User roles/groups come from Cognito token claims
+ * - Permissions injected into ID token by Pre Token Generation Lambda
  */
 export function ProtectedRoute({
   children,
@@ -32,8 +41,11 @@ export function ProtectedRoute({
   requireOrganizer,
   requireAdmin,
   requireSuperAdmin,
+  requirePermission,
+  requirePermissions,
+  requireAllPermissions = false,
 }: ProtectedRouteProps) {
-  const { loading, isAuthenticated, hasRole } = useAuth();
+  const { loading, isAuthenticated, user, hasRole, hasPermission, hasAnyPermission, hasAllPermissions } = useAuth();
   const location = useLocation();
 
   // Show loading state while auth status is being resolved
@@ -82,6 +94,44 @@ export function ProtectedRoute({
 
   if (requireSuperAdmin && !hasRole('SuperAdmin')) {
     return <Navigate to="/unauthorized" state={{ from: location, requiredRole: 'SuperAdmin' }} replace />;
+  }
+
+  // Check permission requirements (fine-grained access control)
+  if (requirePermission) {
+    if (!hasPermission(requirePermission)) {
+      return (
+        <Navigate
+          to="/unauthorized"
+          state={{
+            from: location,
+            requiredPermission: requirePermission,
+            userPermissions: user?.permissions.length || 0,
+          }}
+          replace
+        />
+      );
+    }
+  }
+
+  if (requirePermissions && requirePermissions.length > 0) {
+    const hasRequiredPermissions = requireAllPermissions
+      ? hasAllPermissions(requirePermissions)
+      : hasAnyPermission(requirePermissions);
+
+    if (!hasRequiredPermissions) {
+      return (
+        <Navigate
+          to="/unauthorized"
+          state={{
+            from: location,
+            requiredPermissions: requirePermissions.join(', '),
+            requireAll: requireAllPermissions,
+            userPermissions: user?.permissions.length || 0,
+          }}
+          replace
+        />
+      );
+    }
   }
 
   // Render children (old pattern) or Outlet (new React Router v6 pattern)

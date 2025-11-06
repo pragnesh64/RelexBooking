@@ -17,6 +17,7 @@ const schema = a.schema({
       location: a.string(),
       price: a.float(),
       capacity: a.integer(),
+      sold: a.integer().default(0), // Track sold tickets for capacity management
       imageUrl: a.string(),
       category: a.string(),
       organizerID: a.id().required(), // Cognito username/sub
@@ -48,25 +49,55 @@ const schema = a.schema({
       userID: a.id().required(), // Cognito username/sub
       userName: a.string(),
       userEmail: a.string(),
-      status: a.string().required().default("pending"), // pending, confirmed, cancelled, refunded
+      status: a.string().required().default("pending"), // pending, confirmed, cancelled, refunded, checked_in
       ticketCount: a.integer().default(1),
       totalAmount: a.float(),
-      qrCode: a.string(),
+      qrCode: a.string(), // QR code data for check-in
+      ticketPayload: a.string(), // Secure HMAC token for verification
+      paymentId: a.string(), // Payment provider transaction ID
+      paymentStatus: a.string(), // payment_pending, paid, failed, refunded
       checkedIn: a.boolean().default(false),
+      checkedInBy: a.id(), // User ID who checked in (organizer/admin)
+      checkedInByName: a.string(),
       checkedInAt: a.datetime(),
       cancelledAt: a.datetime(),
+      cancelledBy: a.id(), // Who cancelled (user, organizer, admin)
+      cancellationReason: a.string(),
       refundedAt: a.datetime(),
+      refundAmount: a.float(),
+      notes: a.string(), // Admin/organizer notes
       createdAt: a.datetime(),
       updatedAt: a.datetime(),
     })
     .authorization((allow) => [
       // Users can create and manage their own bookings
       allow.ownerDefinedIn("userID").identityClaim("sub").to(["create", "read", "update"]),
-      // Organizers can read bookings for their events (via Event relationship)
-      allow.authenticated().to(["read"]),
+      // Organizers can read and update bookings for their events
+      allow.group("Organizer").to(["read", "update"]),
       // Admins and SuperAdmins can manage all bookings
       allow.group("Admin").to(["read", "update", "delete"]),
       allow.group("SuperAdmin").to(["create", "read", "update", "delete"]),
+    ]),
+
+  // Audit Log for tracking critical actions
+  AuditLog: a
+    .model({
+      actorID: a.id().required(), // User who performed the action
+      actorName: a.string(),
+      actorEmail: a.string(),
+      action: a.string().required(), // booking.create, booking.cancel, booking.checkin, etc.
+      resourceType: a.string().required(), // Booking, Event, User
+      resourceID: a.id().required(),
+      resourceData: a.json(), // Snapshot of the resource
+      metadata: a.json(), // Additional context (IP, user agent, etc.)
+      timestamp: a.datetime().required(),
+    })
+    .authorization((allow) => [
+      // Only admins can read audit logs
+      allow.group("Admin").to(["read"]),
+      allow.group("SuperAdmin").to(["read", "delete"]),
+      // System can create audit logs
+      allow.authenticated().to(["create"]),
     ]),
 
   // User Profile extension (optional, can also use Cognito attributes)

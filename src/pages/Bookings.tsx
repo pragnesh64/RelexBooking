@@ -1,16 +1,19 @@
-import { Calendar, MapPin, Ticket } from "lucide-react";
+import { Calendar, MapPin, Ticket, Download, X, CheckCircle2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useBookings } from "@/hooks/useBookings";
+import { useBookings, useCancelBooking } from "@/hooks/useBookings";
+import { formatBookingStatus, canCancelBooking } from "@/lib/bookingUtils";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 
 export function Bookings() {
   const navigate = useNavigate();
-  const { bookings, loading, error } = useBookings();
+  const { bookings, loading, error, refetch } = useBookings();
+  const { cancelBooking } = useCancelBooking();
   const [activeTab, setActiveTab] = useState("active");
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   // Filter bookings by tab
   const filteredBookings = bookings.filter((booking) => {
@@ -27,17 +30,48 @@ export function Bookings() {
     return true; // all
   });
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "confirmed":
-        return <Badge variant="success">Confirmed</Badge>;
-      case "pending":
-        return <Badge variant="warning">Pending</Badge>;
-      case "cancelled":
-        return <Badge variant="destructive">Cancelled</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
+  const handleCancelBooking = async (bookingId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click
+
+    const booking = bookings.find(b => b.id === bookingId);
+    if (!booking) return;
+
+    const { allowed, reason } = canCancelBooking({
+      status: booking.status,
+      event: booking.event ? {
+        date: booking.event.date ?? undefined,
+      } : undefined,
+    });
+    if (!allowed) {
+      alert(`Cannot cancel: ${reason}`);
+      return;
     }
+
+    if (!confirm("Are you sure you want to cancel this booking?")) {
+      return;
+    }
+
+    setCancellingId(bookingId);
+    try {
+      await cancelBooking(bookingId, "Cancelled by user");
+      alert("Booking cancelled successfully!");
+      await refetch();
+    } catch (error) {
+      alert(`Cancellation failed: ${error instanceof Error ? error.message : "Failed to cancel booking"}`);
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
+  const handleDownloadTicket = (booking: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    // For now, just navigate to booking detail where QR is shown
+    navigate(`/bookings/${booking.id}`);
+  };
+
+  const getStatusBadge = (status: string) => {
+    const { label, color } = formatBookingStatus(status);
+    return <Badge variant={color}>{label}</Badge>;
   };
 
   return (
@@ -150,13 +184,73 @@ export function Bookings() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">
-                    Booking ID: {booking.id.slice(0, 8).toUpperCase()}
-                  </span>
-                  <Button variant="outline" size="sm">
-                    View Details
-                  </Button>
+                <div className="space-y-3">
+                  {/* Booking Info */}
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">
+                      Booking ID: {booking.id.slice(0, 8).toUpperCase()}
+                    </span>
+                    <div className="flex items-center gap-3">
+                      {booking.ticketCount && (
+                        <div className="flex items-center gap-1">
+                          <Users className="h-3 w-3" />
+                          <span>{booking.ticketCount} {booking.ticketCount === 1 ? 'ticket' : 'tickets'}</span>
+                        </div>
+                      )}
+                      {booking.totalAmount != null && (
+                        <span className="font-semibold">
+                          ${booking.totalAmount.toFixed(2)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Check-in Status */}
+                  {booking.checkedIn && (
+                    <div className="flex items-center gap-2 text-xs text-green-600">
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span>Checked in {booking.checkedInAt ? `on ${new Date(booking.checkedInAt).toLocaleDateString()}` : ''}</span>
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate(`/bookings/${booking.id}`)}
+                    >
+                      View Details
+                    </Button>
+                    <div className="flex gap-2">
+                      {booking.status === "confirmed" && booking.qrCode && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => handleDownloadTicket(booking, e)}
+                        >
+                          <Download className="h-4 w-4 mr-1" />
+                          Ticket
+                        </Button>
+                      )}
+                      {canCancelBooking({
+                        status: booking.status,
+                        event: booking.event ? {
+                          date: booking.event.date ?? undefined,
+                        } : undefined,
+                      }).allowed && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={cancellingId === booking.id}
+                          onClick={(e) => handleCancelBooking(booking.id, e)}
+                        >
+                          <X className="h-4 w-4 mr-1" />
+                          {cancellingId === booking.id ? "Cancelling..." : "Cancel"}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>

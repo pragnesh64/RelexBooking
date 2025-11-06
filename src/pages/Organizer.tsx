@@ -1,12 +1,41 @@
 import { motion } from "framer-motion";
-import { Plus } from "lucide-react";
+import { Navigate } from "react-router-dom";
+import { Plus, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CreateEventForm } from "@/components/forms/CreateEventForm";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useAuth } from "@/hooks/useAuth";
 
 export function Organizer() {
+  const { user, loading, isOrganizer, isAdmin, isSuperAdmin } = useAuth();
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // CRITICAL SECURITY: Defense-in-depth permission check
+  useEffect(() => {
+    if (!loading && user && !isOrganizer && !isAdmin && !isSuperAdmin) {
+      console.warn('[SECURITY] Unauthorized access attempt to Organizer page:', {
+        userId: user.userId,
+        email: user.email,
+        groups: user.groups,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }, [loading, user, isOrganizer, isAdmin, isSuperAdmin]);
+
+  // Show loading state while checking permissions
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // CRITICAL: Block unauthorized access
+  if (!user || (!isOrganizer && !isAdmin && !isSuperAdmin)) {
+    return <Navigate to="/unauthorized" replace />;
+  }
 
   // TODO: Fetch organizer events from Amplify
   // const { data: events, loading, error } = useOrganizerEvents();

@@ -8,7 +8,7 @@ export const APP_ROUTES: AppRoute[] = [
   { href: "/events", label: "Events" },
   { href: "/bookings", label: "Bookings" },
   { href: "/tickets", label: "Tickets" },
-  { href: "/organizer", label: "Organizer" },
+  // Note: "Organizer" is added conditionally in AppLayout based on role
   { href: "/profile", label: "Profile" },
   { href: "/settings", label: "Settings" },
   { href: "/notifications", label: "Notifications" },

@@ -14,7 +14,7 @@ type HeaderProps = {
 
 export function Header({ onMenuToggle, isMobileMenuOpen }: HeaderProps) {
   const navigate = useNavigate();
-  const { user, signOut, isOrganizer, isAdmin } = useAuth();
+  const { user, signOut, isAdmin } = useAuth();
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
@@ -165,7 +165,9 @@ export function Header({ onMenuToggle, isMobileMenuOpen }: HeaderProps) {
               >
                 Settings
               </button>
-              {(isOrganizer || isAdmin) && (
+              {/* CRITICAL SECURITY: Only show Admin Panel link to actual admins */}
+              {/* Double-check: isAdmin already includes SuperAdmin check */}
+              {isAdmin && (
                 <button
                   type="button"
                   onClick={() => {

@@ -10,12 +10,14 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useBookings } from "@/hooks/useBookings";
 import { useEvents } from "@/hooks/useEvents";
+import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 
 export function Dashboard() {
   const navigate = useNavigate();
+  const { isOrganizer } = useAuth();
   const { bookings, loading: bookingsLoading } = useBookings();
   const { events, loading: eventsLoading } = useEvents();
 
@@ -108,10 +110,12 @@ export function Dashboard() {
             <Calendar className="h-4 w-4 mr-2" />
             Browse Events
           </Button>
-          <Button onClick={() => navigate("/organizer")} size="sm">
-            <Plus className="h-4 w-4 mr-2" />
-            Create Event
-          </Button>
+          {isOrganizer && (
+            <Button onClick={() => navigate("/organizer")} size="sm">
+              <Plus className="h-4 w-4 mr-2" />
+              Create Event
+            </Button>
+          )}
         </div>
       </div>
 
@@ -426,22 +430,24 @@ export function Dashboard() {
           </CardHeader>
         </Card>
 
-        <Card
-          className="cursor-pointer hover:bg-muted/50 transition-colors"
-          onClick={() => navigate("/organizer")}
-        >
-          <CardHeader>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Sparkles className="h-5 w-5 text-primary" />
+        {isOrganizer && (
+          <Card
+            className="cursor-pointer hover:bg-muted/50 transition-colors"
+            onClick={() => navigate("/organizer")}
+          >
+            <CardHeader>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Sparkles className="h-5 w-5 text-primary" />
+                </div>
+                <CardTitle className="text-base">Create Event</CardTitle>
               </div>
-              <CardTitle className="text-base">Create Event</CardTitle>
-            </div>
-            <CardDescription className="text-xs">
-              Start organizing and manage your own events
-            </CardDescription>
-          </CardHeader>
-        </Card>
+              <CardDescription className="text-xs">
+                Start organizing and manage your own events
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        )}
 
         <Card
           className="cursor-pointer hover:bg-muted/50 transition-colors"

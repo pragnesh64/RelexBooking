@@ -1,5 +1,6 @@
 import { defineAuth } from '@aws-amplify/backend';
 import { postConfirmation } from '../functions/post-confirmation/resource';
+import { preTokenGeneration } from '../functions/pre-token-generation/resource';
 
 /**
  * Define and configure your auth resource with Cognito Groups support
@@ -19,9 +20,10 @@ export const auth = defineAuth({
   accountRecovery: 'EMAIL_ONLY',
   // Define Cognito User Pool Groups
   groups: ["User", "Organizer", "Admin", "SuperAdmin"],
-  // Post-confirmation trigger to add users to groups
+  // Cognito Lambda Triggers
   triggers: {
     postConfirmation,
+    preTokenGeneration,
   },
   // Grant permissions to the function
   access: (allow) => [
