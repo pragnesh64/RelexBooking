@@ -3,9 +3,11 @@ import { generateBookingQRCode } from '@/lib/qrcode';
 
 /**
  * Hook to generate and manage QR code for a booking
+ * Returns both the QR code image and the secure ticket payload
  */
 export function useQRCode(eventId: string, userId: string, bookingId: string) {
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null);
+  const [ticketPayload, setTicketPayload] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
@@ -18,12 +20,15 @@ export function useQRCode(eventId: string, userId: string, bookingId: string) {
 
       try {
         setLoading(true);
-        const dataUrl = await generateBookingQRCode(eventId, userId, bookingId);
-        setQrCodeDataUrl(dataUrl);
+        // New secure system returns both QR image and signed payload
+        const result = await generateBookingQRCode(eventId, userId, bookingId);
+        setQrCodeDataUrl(result.qrCodeDataUrl);
+        setTicketPayload(result.ticketPayload);
         setError(null);
       } catch (err) {
         setError(err instanceof Error ? err : new Error('Failed to generate QR code'));
         setQrCodeDataUrl(null);
+        setTicketPayload(null);
       } finally {
         setLoading(false);
       }
@@ -32,7 +37,7 @@ export function useQRCode(eventId: string, userId: string, bookingId: string) {
     void generateQR();
   }, [eventId, userId, bookingId]);
 
-  return { qrCodeDataUrl, loading, error };
+  return { qrCodeDataUrl, ticketPayload, loading, error };
 }
 
 /**

@@ -69,12 +69,12 @@ export function Payment() {
         throw new Error("Failed to create booking");
       }
 
-      // Generate QR code
+      // Generate QR code with HMAC security
+      // Note: In a production system, you would:
+      // 1. Upload the QR code image to S3 and get a permanent URL
+      // 2. Store both the S3 URL and the signed ticketPayload in the booking
+      // For now, we skip the update step as the booking hook should handle this
       await generateBookingQRCode(eventId, user.userId, booking.id);
-
-      // Update booking with QR code (store as data URL for now)
-      // In production, you'd upload to S3 and store the URL
-      // await updateBooking({ id: booking.id, qrCode: qrCodeDataUrl });
 
       setIsSuccess(true);
 

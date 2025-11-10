@@ -2,15 +2,20 @@ import { useState, useEffect, useRef } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Camera, XCircle, CheckCircle2, AlertCircle } from 'lucide-react';
-import { parseBookingQRCode, validateBookingQRCode } from '@/lib/qrcode';
+import { Camera, XCircle, Maximize, SwitchCamera } from 'lucide-react';
+import { validateBookingQRCode } from '@/lib/qrcode';
 import { getAmplifyClient } from '@/lib/amplifyClient';
+import { triggerSuccessFeedback, triggerErrorFeedback, triggerWarningFeedback, activateAudio } from '@/lib/scannerFeedback';
+import { ScanResultCard, type ScanResultData } from './ScanResultCard';
+import { useAuth } from '@/hooks/useAuth';
 import type { Booking } from '@/types/graphql';
 
-interface ScanResult {
-  type: 'success' | 'error' | 'warning';
-  message: string;
-  booking?: Booking;
+interface QRScannerProps {
+  eventId?: string; // Optional: filter by specific event
+  onSuccessCallback?: (booking: Booking) => void;
+  onErrorCallback?: (error: string) => void;
+  showFullscreenButton?: boolean;
+  showCameraSwitchButton?: boolean;
 }
 
 /**
@@ -34,19 +39,29 @@ const waitForElementVisible = async (id: string, timeout = 3000): Promise<HTMLEl
   return null;
 };
 
-export function QRScanner() {
+export function QRScanner({
+  eventId,
+  onSuccessCallback,
+  onErrorCallback,
+  showFullscreenButton = true,
+  showCameraSwitchButton = true,
+}: QRScannerProps = {}) {
+  const { user } = useAuth(); // Get current user for check-in tracking
   const [isScanning, setIsScanning] = useState(false);
-  const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+  const [scanResult, setScanResult] = useState<ScanResultData | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [availableCameras, setAvailableCameras] = useState<any[]>([]);
+  const [currentCameraIndex, setCurrentCameraIndex] = useState(0);
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const scanningLockRef = useRef(false);
+  const scannerContainerRef = useRef<HTMLDivElement>(null);
   const scannerDivId = 'qr-reader';
 
   const chooseCameraAndStart = async () => {
     if (!html5QrCodeRef.current) {
       console.log('Creating Html5Qrcode instance');
-      // verbose: true helps debugging
-      html5QrCodeRef.current = new Html5Qrcode(scannerDivId, { verbose: true });
+      html5QrCodeRef.current = new Html5Qrcode(scannerDivId, { verbose: false }); // Set verbose false for production
     }
 
     // Wait for container to be visible (html5-qrcode requires visible container)
@@ -55,10 +70,12 @@ export function QRScanner() {
       throw new Error('Scanner container not visible or not in DOM');
     }
 
+    // Get available cameras
     let cameras: any[] = [];
     try {
       cameras = await Html5Qrcode.getCameras();
       console.log('Available cameras:', cameras);
+      setAvailableCameras(cameras);
     } catch (err) {
       console.warn('getCameras failed:', err);
       cameras = [];
@@ -67,9 +84,13 @@ export function QRScanner() {
     let cameraIdOrConfig: string | { facingMode: string } = { facingMode: 'environment' };
 
     if (cameras && cameras.length > 0) {
-      // Prefer back/rear camera when available
-      const back = cameras.find((c: any) => /back|rear|environment/i.test(c.label || ''));
-      cameraIdOrConfig = (back && back.id) || cameras[0].id;
+      // Use selected camera or prefer back/rear camera
+      if (currentCameraIndex < cameras.length) {
+        cameraIdOrConfig = cameras[currentCameraIndex].id;
+      } else {
+        const back = cameras.find((c: any) => /back|rear|environment/i.test(c.label || ''));
+        cameraIdOrConfig = (back && back.id) || cameras[0].id;
+      }
       console.log('Selected cameraIdOrConfig:', cameraIdOrConfig);
     } else {
       console.log('No enumerated cameras, using facingMode fallback');
@@ -96,18 +117,19 @@ export function QRScanner() {
     setCameraError(null);
     setScanResult(null);
 
+    // Activate audio context on user interaction
+    activateAudio();
+
     // Basic HTTPS and feature checks
     if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
       const msg = 'Camera access requires HTTPS. Please use HTTPS or run on localhost.';
       setCameraError(msg);
-      alert(msg);
       return;
     }
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       const msg = 'Camera not supported. Use Chrome/Edge/Firefox/Safari with camera support.';
       setCameraError(msg);
-      alert(msg);
       return;
     }
 
@@ -118,7 +140,6 @@ export function QRScanner() {
     } catch (permErr: any) {
       const friendly = `Camera permission error: ${permErr?.message || permErr?.name || 'unknown'}`;
       setCameraError(friendly);
-      alert(friendly);
       return;
     }
 
@@ -126,11 +147,10 @@ export function QRScanner() {
     const scannerDiv = document.getElementById(scannerDivId);
     if (!scannerDiv) {
       setCameraError('Scanner container not found. Refresh the page.');
-      alert('Scanner container not found. Refresh the page.');
       return;
     }
 
-    // Make sure the scanner container is visible (if your UI toggles 'hidden', show it first)
+    // Make sure the scanner container is visible
     scannerDiv.style.display = 'block';
 
     try {
@@ -167,7 +187,7 @@ export function QRScanner() {
     }
     try {
       // Clear any internal resources & UI
-      await html5QrCodeRef.current.clear();
+      html5QrCodeRef.current.clear();
     } catch (err) {
       console.warn('clear() error (can be ignored):', err);
     }
@@ -196,32 +216,43 @@ export function QRScanner() {
       // Don't immediately clear instance — stop streaming gracefully
       if (html5QrCodeRef.current && isScanning) {
         try {
-          await html5QrCodeRef.current.pause(); // Pause (if supported) before stop to be safe
+          html5QrCodeRef.current.pause(true);
         } catch (pauseErr) {
           // Ignore if not supported
         }
       }
 
-      // Optional: local parse first (fast fail)
-      const parsed = parseBookingQRCode(decodedText);
-      if (!parsed) {
-        setScanResult({ type: 'error', message: 'Invalid QR code format' });
-        scanningLockRef.current = false;
-        return;
-      }
+      // Show processing state
+      setScanResult({
+        type: 'warning',
+        message: 'Validating ticket...',
+        timestamp: new Date().toISOString(),
+      });
+      triggerWarningFeedback();
 
-      setScanResult({ type: 'warning', message: 'Processing QR code...' });
-
-      // Fetch booking (retry loop, but tighten errors)
+      // Fetch booking
       const client = getAmplifyClient();
       if (!client) {
         throw new Error('Amplify client not configured');
       }
 
+      // Parse QR to get booking ID (supports both secure and legacy formats)
+      const { parseQRCode } = await import('@/lib/ticketSecurity');
+      const parsed = parseQRCode(decodedText);
+
+      if (!parsed) {
+        throw new Error('Invalid QR code format');
+      }
+
+      const bookingId = parsed.type === 'secure' ? parsed.payload!.bid : parsed.legacy!.bookingId;
+
+      // Fetch booking with event details
       let bookingResult = null;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          const res = await client.models.Booking.get({ id: parsed.bookingId });
+          const res = await client.models.Booking.get({ id: bookingId }, {
+            selectionSet: ['id', 'eventID', 'userID', 'userName', 'userEmail', 'status', 'ticketCount', 'checkedIn', 'checkedInAt', 'event.id', 'event.title']
+          });
           bookingResult = res;
           break;
         } catch (e) {
@@ -232,47 +263,164 @@ export function QRScanner() {
       }
 
       if (!bookingResult || !bookingResult.data) {
-        setScanResult({ type: 'error', message: 'Booking not found' });
-        return;
+        throw new Error('Booking not found in database');
       }
 
       const booking = bookingResult.data as unknown as Booking;
 
-      // Validate the QR vs DB state
-      const validation = validateBookingQRCode(decodedText, {
+      // Optional: Filter by eventId if specified
+      if (eventId && booking.eventID !== eventId) {
+        throw new Error('This ticket is for a different event');
+      }
+
+      // CRITICAL CHECK 1: Initial validation
+      const validation = await validateBookingQRCode(decodedText, {
         id: booking.id,
         eventID: booking.eventID,
         userID: booking.userID,
         status: booking.status,
         checkedIn: booking.checkedIn ?? null,
+        userName: booking.userName,
+        userEmail: booking.userEmail,
+        ticketCount: booking.ticketCount,
+        event: booking.event,
       });
 
       if (!validation.valid) {
-        setScanResult({ type: 'error', message: validation.reason || 'Invalid ticket' });
-        return;
+        throw new Error(validation.reason || 'Invalid ticket');
       }
 
-      // Update booking checkedIn (ensure proper server permission)
-      await client.models.Booking.update({
-        id: booking.id,
-        checkedIn: true,
-        checkedInAt: new Date().toISOString(),
-      });
+      // CRITICAL: Use atomic Lambda function with DynamoDB conditional update
+      // This is the ONLY way to guarantee no race conditions
+      const checkedInBy = user?.userId || 'unknown';
+      const checkedInByName = user?.name || user?.email || 'Staff';
 
-      setScanResult({
+      console.log('[SECURITY] Calling atomic check-in Lambda...');
+
+      // Call the Lambda function that uses DynamoDB conditional expression
+      // This will ONLY succeed if checkedIn is false at the database level
+      try {
+        const lambdaUrl = `https://${window.location.hostname}/api/check-in`;
+
+        // Get access token for Lambda authorization
+        const { fetchAuthSession } = await import('aws-amplify/auth');
+        const session = await fetchAuthSession();
+        const token = session.tokens?.idToken?.toString() || '';
+
+        const response = await fetch(lambdaUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            // Include auth token for Lambda authorization
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            bookingId: booking.id,
+            checkedInBy,
+            checkedInByName,
+            eventId: booking.eventID,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+          throw new Error(errorData.message || errorData.error || 'Check-in failed');
+        }
+
+        const result = await response.json();
+
+        if (!result.success) {
+          // Lambda rejected the check-in (already checked in or other reason)
+          console.warn('[SECURITY] Lambda check-in rejected:', result.message);
+          throw new Error(result.message || 'Check-in failed');
+        }
+
+        console.log('[SECURITY] Atomic check-in successful:', result.booking);
+      } catch (lambdaError: any) {
+        // If Lambda call fails, fall back to direct update with re-fetch protection
+        console.warn('[FALLBACK] Lambda call failed, using fallback method:', lambdaError.message);
+
+        // Re-fetch to check current state
+        const freshBookingResult = await client.models.Booking.get({ id: booking.id });
+
+        if (!freshBookingResult.data) {
+          throw new Error('Booking disappeared - cannot check in');
+        }
+
+        const freshBooking = freshBookingResult.data as unknown as Booking;
+
+        // Check if already checked in
+        if (freshBooking.checkedIn === true) {
+          console.warn('[SECURITY] Race condition detected - booking already checked in');
+          throw new Error('Already checked in - ticket was used by another scanner');
+        }
+
+        // Proceed with fallback update
+        console.log('[FALLBACK] Attempting direct update...');
+        const updateResult = await client.models.Booking.update({
+          id: booking.id,
+          checkedIn: true,
+          checkedInAt: new Date().toISOString(),
+          checkedInBy,
+          checkedInByName,
+          status: 'checked_in',
+        });
+
+        if (!updateResult.data) {
+          throw new Error('Update failed - please try again');
+        }
+
+        // Verify
+        const verifyResult = await client.models.Booking.get({ id: booking.id });
+        if (verifyResult.data?.checkedIn !== true) {
+          throw new Error('Check-in verification failed');
+        }
+
+        console.log('[FALLBACK] Direct update successful');
+      }
+
+      // Success! Trigger feedback
+      triggerSuccessFeedback();
+
+      const resultData: ScanResultData = {
         type: 'success',
-        message: `Successfully checked in ${booking.userName || 'guest'}`,
-        booking,
-      });
+        message: `Welcome! Check-in successful`,
+        bookingDetails: validation.bookingDetails,
+        timestamp: new Date().toISOString(),
+      };
+
+      setScanResult(resultData);
+
+      // Call success callback if provided
+      if (onSuccessCallback) {
+        onSuccessCallback(booking);
+      }
     } catch (e: any) {
       console.error('Error processing scan:', e);
-      setScanResult({ type: 'error', message: e.message || 'Failed to process QR code' });
+
+      // Error feedback
+      triggerErrorFeedback();
+
+      setScanResult({
+        type: 'error',
+        message: e.message || 'Failed to process QR code',
+        timestamp: new Date().toISOString(),
+      });
+
+      // Call error callback if provided
+      if (onErrorCallback) {
+        onErrorCallback(e.message || 'Failed to process QR code');
+      }
     } finally {
       // Cleanup scanner instance so user can press "Scan Next"
       try {
         if (html5QrCodeRef.current) {
-          await html5QrCodeRef.current.stop(); // Stop camera
-          await html5QrCodeRef.current.clear();
+          await html5QrCodeRef.current.stop();
+          try {
+            html5QrCodeRef.current.clear();
+          } catch {
+            // Ignore cleanup errors
+          }
         }
       } catch (stopErr) {
         console.warn('Error stopping scanner after scan:', stopErr);
@@ -290,30 +438,110 @@ export function QRScanner() {
     }
   };
 
+  // Switch camera function
+  const switchCamera = async () => {
+    if (availableCameras.length <= 1) return;
+
+    const nextIndex = (currentCameraIndex + 1) % availableCameras.length;
+    setCurrentCameraIndex(nextIndex);
+
+    // Restart with new camera
+    await stopScanning();
+    await startScanning();
+  };
+
+  // Fullscreen toggle
+  const toggleFullscreen = () => {
+    if (!scannerContainerRef.current) return;
+
+    if (!document.fullscreenElement) {
+      scannerContainerRef.current.requestFullscreen().then(() => {
+        setIsFullscreen(true);
+      }).catch(err => {
+        console.warn('Failed to enter fullscreen:', err);
+      });
+    } else {
+      document.exitFullscreen().then(() => {
+        setIsFullscreen(false);
+      }).catch(err => {
+        console.warn('Failed to exit fullscreen:', err);
+      });
+    }
+  };
+
   useEffect(() => {
+    // Fullscreen change listener
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+
     return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
       // Ensure camera & instance cleaned up on unmount
       void stopScanning();
     };
   }, []);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" ref={scannerContainerRef}>
       <Card className="p-6">
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold">Scan Event Ticket</h3>
-            {isScanning ? (
-              <Button onClick={stopScanning} variant="destructive" size="sm">
-                <XCircle className="mr-2 h-4 w-4" />
-                Stop
-              </Button>
-            ) : (
-              <Button onClick={startScanning} size="sm">
-                <Camera className="mr-2 h-4 w-4" />
-                Start Scanning
-              </Button>
-            )}
+          {/* Header with controls */}
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <Camera className="h-5 w-5" />
+              QR Ticket Scanner
+            </h3>
+            <div className="flex items-center gap-2">
+              {/* Camera switch button */}
+              {showCameraSwitchButton && availableCameras.length > 1 && isScanning && (
+                <Button
+                  onClick={switchCamera}
+                  variant="outline"
+                  size="sm"
+                  disabled={!isScanning}
+                >
+                  <SwitchCamera className="mr-2 h-4 w-4" />
+                  Switch
+                </Button>
+              )}
+
+              {/* Fullscreen button */}
+              {showFullscreenButton && (
+                <Button
+                  onClick={toggleFullscreen}
+                  variant="outline"
+                  size="sm"
+                >
+                  <Maximize className="mr-2 h-4 w-4" />
+                  {isFullscreen ? 'Exit' : 'Fullscreen'}
+                </Button>
+              )}
+
+              {/* Start/Stop button */}
+              {isScanning ? (
+                <Button onClick={stopScanning} variant="destructive" size="sm">
+                  <XCircle className="mr-2 h-4 w-4" />
+                  Stop Scanner
+                </Button>
+              ) : (
+                <Button onClick={startScanning} size="sm">
+                  {scanResult ? (
+                    <>
+                      <Camera className="mr-2 h-4 w-4" />
+                      Scan Next
+                    </>
+                  ) : (
+                    <>
+                      <Camera className="mr-2 h-4 w-4" />
+                      Start Scanner
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
           </div>
 
           {cameraError && (
@@ -359,84 +587,29 @@ export function QRScanner() {
         </div>
       </Card>
 
-      {scanResult && (
-        <Card
-          className={`p-6 ${
-            scanResult.type === 'success'
-              ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800'
-              : scanResult.type === 'warning'
-              ? 'bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800'
-              : 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800'
-          }`}
-        >
-          <div className="flex items-start gap-4">
-            {scanResult.type === 'success' ? (
-              <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
-            ) : scanResult.type === 'warning' ? (
-              <AlertCircle className="h-6 w-6 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5 animate-pulse" />
-            ) : (
-              <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-            )}
-            <div className="flex-1">
-              <h4
-                className={`font-semibold mb-2 ${
-                  scanResult.type === 'success'
-                    ? 'text-green-900 dark:text-green-100'
-                    : scanResult.type === 'warning'
-                    ? 'text-yellow-900 dark:text-yellow-100'
-                    : 'text-red-900 dark:text-red-100'
-                }`}
-              >
-                {scanResult.type === 'success'
-                  ? 'Check-in Successful'
-                  : scanResult.type === 'warning'
-                  ? 'Processing...'
-                  : 'Check-in Failed'}
-              </h4>
-              <p
-                className={`text-sm mb-4 ${
-                  scanResult.type === 'success'
-                    ? 'text-green-800 dark:text-green-300'
-                    : scanResult.type === 'warning'
-                    ? 'text-yellow-800 dark:text-yellow-300'
-                    : 'text-red-800 dark:text-red-300'
-                }`}
-              >
-                {scanResult.message}
-              </p>
+      {/* Scan Result Card */}
+      <ScanResultCard
+        result={scanResult}
+        onDismiss={() => setScanResult(null)}
+        autoDismiss={scanResult?.type === 'success'}
+        autoDismissDelay={4000}
+      />
 
-              {scanResult.booking && (
-                <div className="space-y-2 text-sm">
-                  <p>
-                    <span className="font-medium">Name:</span> {scanResult.booking.userName}
-                  </p>
-                  <p>
-                    <span className="font-medium">Email:</span> {scanResult.booking.userEmail}
-                  </p>
-                  <p>
-                    <span className="font-medium">Tickets:</span> {scanResult.booking.ticketCount}
-                  </p>
-                  {scanResult.booking.event && (
-                    <p>
-                      <span className="font-medium">Event:</span> {scanResult.booking.event.title}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              <Button
-                onClick={() => {
-                  setScanResult(null);
-                  void startScanning();
-                }}
-                className="mt-4"
-                size="sm"
-              >
-                Scan Next Ticket
-              </Button>
-            </div>
-          </div>
-        </Card>
+      {/* Ready to scan next button (after result is shown) */}
+      {scanResult && !isScanning && (
+        <div className="flex justify-center">
+          <Button
+            onClick={() => {
+              setScanResult(null);
+              void startScanning();
+            }}
+            size="lg"
+            className="shadow-lg"
+          >
+            <Camera className="mr-2 h-5 w-5" />
+            Scan Next Ticket
+          </Button>
+        </div>
       )}
     </div>
   );
