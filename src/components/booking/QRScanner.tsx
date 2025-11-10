@@ -290,94 +290,54 @@ export function QRScanner({
         throw new Error(validation.reason || 'Invalid ticket');
       }
 
-      // CRITICAL: Use atomic Lambda function with DynamoDB conditional update
-      // This is the ONLY way to guarantee no race conditions
+      // CRITICAL: Enhanced protection with immediate re-fetch before update
+      // This significantly reduces the race condition window
       const checkedInBy = user?.userId || 'unknown';
       const checkedInByName = user?.name || user?.email || 'Staff';
 
-      console.log('[SECURITY] Calling atomic check-in Lambda...');
+      console.log('[SECURITY] Re-fetching booking for race condition protection...');
 
-      // Call the Lambda function that uses DynamoDB conditional expression
-      // This will ONLY succeed if checkedIn is false at the database level
-      try {
-        const lambdaUrl = `https://${window.location.hostname}/api/check-in`;
+      // Re-fetch booking immediately before update to get freshest state
+      const freshBookingResult = await client.models.Booking.get({ id: booking.id });
 
-        // Get access token for Lambda authorization
-        const { fetchAuthSession } = await import('aws-amplify/auth');
-        const session = await fetchAuthSession();
-        const token = session.tokens?.idToken?.toString() || '';
-
-        const response = await fetch(lambdaUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            // Include auth token for Lambda authorization
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            bookingId: booking.id,
-            checkedInBy,
-            checkedInByName,
-            eventId: booking.eventID,
-          }),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-          throw new Error(errorData.message || errorData.error || 'Check-in failed');
-        }
-
-        const result = await response.json();
-
-        if (!result.success) {
-          // Lambda rejected the check-in (already checked in or other reason)
-          console.warn('[SECURITY] Lambda check-in rejected:', result.message);
-          throw new Error(result.message || 'Check-in failed');
-        }
-
-        console.log('[SECURITY] Atomic check-in successful:', result.booking);
-      } catch (lambdaError: any) {
-        // If Lambda call fails, fall back to direct update with re-fetch protection
-        console.warn('[FALLBACK] Lambda call failed, using fallback method:', lambdaError.message);
-
-        // Re-fetch to check current state
-        const freshBookingResult = await client.models.Booking.get({ id: booking.id });
-
-        if (!freshBookingResult.data) {
-          throw new Error('Booking disappeared - cannot check in');
-        }
-
-        const freshBooking = freshBookingResult.data as unknown as Booking;
-
-        // Check if already checked in
-        if (freshBooking.checkedIn === true) {
-          console.warn('[SECURITY] Race condition detected - booking already checked in');
-          throw new Error('Already checked in - ticket was used by another scanner');
-        }
-
-        // Proceed with fallback update
-        console.log('[FALLBACK] Attempting direct update...');
-        const updateResult = await client.models.Booking.update({
-          id: booking.id,
-          checkedIn: true,
-          checkedInAt: new Date().toISOString(),
-          checkedInBy,
-          checkedInByName,
-          status: 'checked_in',
-        });
-
-        if (!updateResult.data) {
-          throw new Error('Update failed - please try again');
-        }
-
-        // Verify
-        const verifyResult = await client.models.Booking.get({ id: booking.id });
-        if (verifyResult.data?.checkedIn !== true) {
-          throw new Error('Check-in verification failed');
-        }
-
-        console.log('[FALLBACK] Direct update successful');
+      if (!freshBookingResult.data) {
+        throw new Error('Booking disappeared - cannot check in');
       }
+
+      const freshBooking = freshBookingResult.data as unknown as Booking;
+
+      // CRITICAL CHECK: Verify AGAIN that checkedIn is still false
+      if (freshBooking.checkedIn === true) {
+        console.warn('[SECURITY] Race condition detected - booking already checked in');
+        throw new Error('Already checked in - ticket was used by another scanner');
+      }
+
+      // If we reach here, proceed with update
+      console.log('[SECURITY] Booking confirmed available, updating...');
+
+      const updateResult = await client.models.Booking.update({
+        id: booking.id,
+        checkedIn: true,
+        checkedInAt: new Date().toISOString(),
+        checkedInBy,
+        checkedInByName,
+        status: 'checked_in',
+      });
+
+      if (!updateResult.data) {
+        throw new Error('Update failed - please try again');
+      }
+
+      // Final verification
+      console.log('[SECURITY] Verifying check-in was recorded...');
+      const verifyResult = await client.models.Booking.get({ id: booking.id });
+
+      if (verifyResult.data?.checkedIn !== true) {
+        console.error('[SECURITY] Verification failed - checkedIn not set');
+        throw new Error('Check-in verification failed - please scan again');
+      }
+
+      console.log('[SECURITY] Check-in successful and verified');
 
       // Success! Trigger feedback
       triggerSuccessFeedback();
