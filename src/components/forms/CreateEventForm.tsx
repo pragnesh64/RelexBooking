@@ -128,6 +128,19 @@ export function CreateEventForm({ open, onClose }: CreateEventFormProps) {
             type: imageFile.type,
           });
 
+          // Verify authentication session before upload
+          const { fetchAuthSession } = await import('aws-amplify/auth');
+          const session = await fetchAuthSession();
+          console.log("[CreateEvent] Auth session valid:", {
+            hasTokens: !!session.tokens,
+            hasIdToken: !!session.tokens?.idToken,
+            hasAccessToken: !!session.tokens?.accessToken,
+          });
+
+          if (!session.tokens?.accessToken) {
+            throw new Error('Authentication session expired. Please log out and log back in.');
+          }
+
           // Generate a temporary event ID for the upload path
           const tempEventId = `temp-${Date.now()}`;
           const uploadResult = await uploadEventImage(
