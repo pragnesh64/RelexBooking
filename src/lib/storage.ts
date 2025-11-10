@@ -13,6 +13,8 @@ export async function uploadFile(
 ): Promise<{ key: string; url: string }> {
   try {
     console.log('[Storage] Starting upload with path:', path);
+    console.log('[Storage] File type:', file.type);
+    console.log('[Storage] File size:', file.size, 'bytes');
 
     const result = await uploadData({
       path,
