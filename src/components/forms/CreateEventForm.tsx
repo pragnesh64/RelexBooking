@@ -117,6 +117,17 @@ export function CreateEventForm({ open, onClose }: CreateEventFormProps) {
       // Handle image upload or URL
       if (imageMode === "upload" && imageFile) {
         try {
+          console.log("[CreateEvent] Starting image upload...");
+          console.log("[CreateEvent] User authenticated:", {
+            userId: user.userId,
+            email: user.email,
+          });
+          console.log("[CreateEvent] File details:", {
+            name: imageFile.name,
+            size: imageFile.size,
+            type: imageFile.type,
+          });
+
           // Generate a temporary event ID for the upload path
           const tempEventId = `temp-${Date.now()}`;
           const uploadResult = await uploadEventImage(
@@ -125,9 +136,18 @@ export function CreateEventForm({ open, onClose }: CreateEventFormProps) {
             (progress) => setUploadProgress(progress)
           );
           finalImageUrl = uploadResult.url;
-        } catch (uploadError) {
-          console.error("Image upload failed:", uploadError);
-          alert("Failed to upload image. Please try again or use an image URL instead.");
+
+          console.log("[CreateEvent] Image upload successful:", finalImageUrl);
+        } catch (uploadError: any) {
+          console.error("[CreateEvent] Image upload failed:", uploadError);
+          console.error("[CreateEvent] Error details:", {
+            message: uploadError?.message,
+            name: uploadError?.name,
+            cause: uploadError?.cause,
+          });
+
+          const errorMessage = uploadError?.message || "Unknown error occurred";
+          alert(`Failed to upload image: ${errorMessage}\n\nPlease try again or use an image URL instead.`);
           setLoading(false);
           return;
         }

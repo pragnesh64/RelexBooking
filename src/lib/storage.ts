@@ -12,6 +12,8 @@ export async function uploadFile(
   }
 ): Promise<{ key: string; url: string }> {
   try {
+    console.log('[Storage] Starting upload with path:', path);
+
     const result = await uploadData({
       path,
       data: file,
@@ -19,24 +21,44 @@ export async function uploadFile(
         contentType: file.type,
         metadata: options?.metadata,
         onProgress: (progress) => {
-          if (progress.totalBytes) {
-            const percentage = (progress.transferredBytes / progress.totalBytes) * 100;
+          if (progress.totalBytes && progress.totalBytes > 0) {
+            const percentage = Math.round((progress.transferredBytes / progress.totalBytes) * 100);
+            console.log(`[Storage] Upload progress: ${percentage}%`);
             options?.onProgress?.(percentage);
           }
         },
       },
     }).result;
 
+    console.log('[Storage] Upload completed, result:', result);
+
     // Get the public URL for the uploaded file
     const urlResult = await getUrl({ path: result.path });
+
+    console.log('[Storage] Got URL:', urlResult.url.toString());
 
     return {
       key: result.path,
       url: urlResult.url.toString(),
     };
-  } catch (error) {
-    console.error('File upload failed:', error);
-    throw new Error('Failed to upload file');
+  } catch (error: any) {
+    console.error('[Storage] File upload failed:', error);
+    console.error('[Storage] Error details:', {
+      message: error?.message,
+      name: error?.name,
+      stack: error?.stack,
+    });
+
+    // Provide more specific error messages
+    if (error?.message?.includes('Access Denied')) {
+      throw new Error('Access denied. Please ensure you are logged in and have permission to upload files.');
+    } else if (error?.message?.includes('Network')) {
+      throw new Error('Network error. Please check your internet connection and try again.');
+    } else if (error?.message?.includes('path')) {
+      throw new Error('Invalid file path. Please try again.');
+    }
+
+    throw new Error(error?.message || 'Failed to upload file');
   }
 }
 
@@ -50,8 +72,13 @@ export async function uploadEventImage(
 ): Promise<{ key: string; url: string }> {
   const timestamp = Date.now();
   const fileExtension = file.name.split('.').pop();
-  const fileName = `${eventId}-${timestamp}.${fileExtension}`;
+  const sanitizedExtension = fileExtension?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+  const fileName = `${eventId}-${timestamp}.${sanitizedExtension}`;
+
+  // Path for events - accessible to authenticated users for write, public for read
   const path = `events/${fileName}`;
+
+  console.log('[Storage] Uploading event image:', { fileName, path, fileSize: file.size });
 
   return uploadFile(file, path, {
     onProgress,
