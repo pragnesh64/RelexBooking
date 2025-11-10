@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Calendar, MapPin, DollarSign, Users, FileText, Image as ImageIcon, Upload, Link as LinkIcon, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,22 +12,24 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
-import { useCreateEvent } from "@/hooks/useEvents";
+import { useUpdateEvent } from "@/hooks/useEvents";
 import { uploadEventImage } from "@/lib/storage";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { Event } from "@/types/graphql";
 
-interface CreateEventFormProps {
+interface EditEventFormProps {
   open: boolean;
   onClose: () => void;
+  event: Event | null;
   onSuccess?: () => void;
 }
 
-export function CreateEventForm({ open, onClose, onSuccess }: CreateEventFormProps) {
+export function EditEventForm({ open, onClose, event, onSuccess }: EditEventFormProps) {
   const { user } = useAuth();
-  const { createEvent, loading: creating } = useCreateEvent();
+  const { updateEvent, loading: updating } = useUpdateEvent();
   const [loading, setLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [imageMode, setImageMode] = useState<"upload" | "url">("upload");
+  const [imageMode, setImageMode] = useState<"upload" | "url">("url");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageUrl, setImageUrl] = useState("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -42,6 +44,37 @@ export function CreateEventForm({ open, onClose, onSuccess }: CreateEventFormPro
     capacity: "",
     category: "",
   });
+
+  // Initialize form with event data when event changes
+  useEffect(() => {
+    if (event && open) {
+      // Parse date and time from event.date (ISO string)
+      const eventDate = event.date ? new Date(event.date) : null;
+      const dateStr = eventDate ? eventDate.toISOString().split('T')[0] : "";
+      const timeStr = eventDate ? eventDate.toISOString().split('T')[1].substring(0, 5) : "";
+
+      setFormData({
+        title: event.title || "",
+        description: event.description || "",
+        date: dateStr,
+        time: timeStr,
+        location: event.location || "",
+        price: event.price?.toString() || "0",
+        capacity: event.capacity?.toString() || "",
+        category: event.category || "",
+      });
+
+      // Set existing image
+      if (event.imageUrl) {
+        setImageUrl(event.imageUrl);
+        setImagePreview(event.imageUrl);
+        setImageMode("url");
+      } else {
+        setImageUrl("");
+        setImagePreview(null);
+      }
+    }
+  }, [event, open]);
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -102,7 +135,12 @@ export function CreateEventForm({ open, onClose, onSuccess }: CreateEventFormPro
     e.preventDefault();
 
     if (!user) {
-      alert("You must be logged in to create an event");
+      alert("You must be logged in to edit an event");
+      return;
+    }
+
+    if (!event) {
+      alert("No event to update");
       return;
     }
 
@@ -113,17 +151,17 @@ export function CreateEventForm({ open, onClose, onSuccess }: CreateEventFormPro
       // Combine date and time into datetime string
       const dateTime = `${formData.date}T${formData.time}:00.000Z`;
 
-      let finalImageUrl = "";
+      let finalImageUrl = event.imageUrl || ""; // Keep existing image by default
 
-      // Handle image upload or URL
+      // Handle image upload or URL (only if changed)
       if (imageMode === "upload" && imageFile) {
         try {
-          console.log("[CreateEvent] Starting image upload...");
-          console.log("[CreateEvent] User authenticated:", {
+          console.log("[EditEvent] Starting image upload...");
+          console.log("[EditEvent] User authenticated:", {
             userId: user.userId,
             email: user.email,
           });
-          console.log("[CreateEvent] File details:", {
+          console.log("[EditEvent] File details:", {
             name: imageFile.name,
             size: imageFile.size,
             type: imageFile.type,
@@ -132,7 +170,7 @@ export function CreateEventForm({ open, onClose, onSuccess }: CreateEventFormPro
           // Verify authentication session before upload
           const { fetchAuthSession } = await import('aws-amplify/auth');
           const session = await fetchAuthSession();
-          console.log("[CreateEvent] Auth session valid:", {
+          console.log("[EditEvent] Auth session valid:", {
             hasTokens: !!session.tokens,
             hasIdToken: !!session.tokens?.idToken,
             hasAccessToken: !!session.tokens?.accessToken,
@@ -142,19 +180,17 @@ export function CreateEventForm({ open, onClose, onSuccess }: CreateEventFormPro
             throw new Error('Authentication session expired. Please log out and log back in.');
           }
 
-          // Generate a temporary event ID for the upload path
-          const tempEventId = `temp-${Date.now()}`;
           const uploadResult = await uploadEventImage(
             imageFile,
-            tempEventId,
+            event.id,
             (progress) => setUploadProgress(progress)
           );
           finalImageUrl = uploadResult.url;
 
-          console.log("[CreateEvent] Image upload successful:", finalImageUrl);
+          console.log("[EditEvent] Image upload successful:", finalImageUrl);
         } catch (uploadError: any) {
-          console.error("[CreateEvent] Image upload failed:", uploadError);
-          console.error("[CreateEvent] Error details:", {
+          console.error("[EditEvent] Image upload failed:", uploadError);
+          console.error("[EditEvent] Error details:", {
             message: uploadError?.message,
             name: uploadError?.name,
             cause: uploadError?.cause,
@@ -165,7 +201,7 @@ export function CreateEventForm({ open, onClose, onSuccess }: CreateEventFormPro
           setLoading(false);
           return;
         }
-      } else if (imageMode === "url" && imageUrl) {
+      } else if (imageMode === "url" && imageUrl && imageUrl !== event.imageUrl) {
         // Validate URL format
         if (!imageUrl.match(/^https?:\/\/.+/)) {
           alert("Please enter a valid image URL (must start with http:// or https://)");
@@ -175,8 +211,9 @@ export function CreateEventForm({ open, onClose, onSuccess }: CreateEventFormPro
         finalImageUrl = imageUrl.trim();
       }
 
-      // Create event with organizerID set to current user's sub (Cognito user ID)
+      // Update event
       const eventInput: any = {
+        id: event.id,
         title: formData.title,
         description: formData.description,
         date: dateTime,
@@ -184,44 +221,25 @@ export function CreateEventForm({ open, onClose, onSuccess }: CreateEventFormPro
         price: parseFloat(formData.price) || 0,
         capacity: parseInt(formData.capacity) || 0,
         category: formData.category,
-        organizerID: user.userId, // Cognito sub
-        organizerName: user.name || user.email || user.username,
-        status: "published",
-        publishedAt: new Date().toISOString(),
       };
 
-      // Only include imageUrl if it's provided
-      if (finalImageUrl) {
+      // Only update imageUrl if it changed
+      if (finalImageUrl && finalImageUrl !== event.imageUrl) {
         eventInput.imageUrl = finalImageUrl;
       }
 
-      console.log("Creating event with data:", eventInput);
+      console.log("Updating event with data:", eventInput);
 
-      const newEvent = await createEvent(eventInput);
+      const updatedEvent = await updateEvent(eventInput);
 
-      if (newEvent) {
-        alert("Event created successfully!");
+      if (updatedEvent) {
+        alert("Event updated successfully!");
         onSuccess?.(); // Callback to refetch events
         onClose();
-
-        // Reset form
-        setFormData({
-          title: "",
-          description: "",
-          date: "",
-          time: "",
-          location: "",
-          price: "",
-          capacity: "",
-          category: "",
-        });
-        clearImage();
-        setImageMode("upload");
-        setUploadProgress(0);
       }
     } catch (error) {
-      console.error("Error creating event:", error);
-      alert("Failed to create event. Please try again.");
+      console.error("Error updating event:", error);
+      alert("Failed to update event. Please try again.");
     } finally {
       setLoading(false);
       setUploadProgress(0);
@@ -230,30 +248,23 @@ export function CreateEventForm({ open, onClose, onSuccess }: CreateEventFormPro
 
   const handleClose = () => {
     if (!loading) {
-      setFormData({
-        title: "",
-        description: "",
-        date: "",
-        time: "",
-        location: "",
-        price: "",
-        capacity: "",
-        category: "",
-      });
+      // Reset form state
       clearImage();
-      setImageMode("upload");
+      setImageMode("url");
       setUploadProgress(0);
       onClose();
     }
   };
 
+  if (!event) return null;
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-2xl font-bold">Create New Event</DialogTitle>
+          <DialogTitle className="text-2xl font-bold">Edit Event</DialogTitle>
           <DialogDescription>
-            Fill in the details below to create a new event
+            Update the event details below
           </DialogDescription>
         </DialogHeader>
 
@@ -397,7 +408,7 @@ export function CreateEventForm({ open, onClose, onSuccess }: CreateEventFormPro
               <ImageIcon className="h-4 w-4" />
               Event Image (Optional)
             </Label>
-            
+
             <Tabs value={imageMode} onValueChange={(v) => setImageMode(v as "upload" | "url")}>
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="upload" className="flex items-center gap-2">
@@ -498,8 +509,8 @@ export function CreateEventForm({ open, onClose, onSuccess }: CreateEventFormPro
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={loading || creating}>
-              {loading || creating ? "Creating..." : "Create Event"}
+            <Button type="submit" disabled={loading || updating}>
+              {loading || updating ? "Updating..." : "Update Event"}
             </Button>
           </div>
         </form>
